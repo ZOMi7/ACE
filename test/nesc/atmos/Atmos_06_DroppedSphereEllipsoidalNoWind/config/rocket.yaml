@@ -10,6 +10,9 @@ rockets:
     start_in_eci: true
     eci_position_m: [6387281.000000, 0.000000, 0.000000]
     eci_velocity_m_s: [0.000000, 465.767876, 0.000000]
+    # NESC's local NED attitude, body to ECI [w, x, y, z]. the sim's nose (+z) is NESC's x
+    initial_attitude_q: [0.707106781186548, 0.0, 0.0, 0.707106781186548]
+    initial_body_rates_rad_s: [0.0, 0.0, 0.0] # NESC's (q, r, p)
 
     nosecone_length: 0.0
     nosecone_mass: 0.0

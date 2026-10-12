@@ -1,5 +1,5 @@
 # case 5: sphere with CD 0.1 dropped from 30,000 ft at rest over a round rotating earth with inverse square gravity
-# (sim.yaml sets the earth). APPROXIMATE: the sim can't set the initial 10/20/30 deg/s spin yet
+# (sim.yaml sets the earth), spinning 10/20/30 deg/s
 # ECI is ECEF at t = 0, so lat 0 lon 0 lies on +x, 30,000 ft above NESC's 6,371,007.1809 m round earth, and the inertial velocity is the
 # earth relative velocity plus the earth's spin (w x r, w = 7.292115e-5 rad/s)
 
@@ -11,6 +11,9 @@ rockets:
     start_in_eci: true
     eci_position_m: [6380151.180900, 0.000000, 0.000000]
     eci_velocity_m_s: [0.000000, 465.247961, 0.000000]
+    # NESC's local NED attitude, body to ECI [w, x, y, z]. the sim's nose (+z) is NESC's x
+    initial_attitude_q: [0.707106781186548, 0.0, 0.0, 0.707106781186548]
+    initial_body_rates_rad_s: [0.349065850398615, 0.523598775598299, 0.174532925199433] # NESC's (q, r, p)
 
     nosecone_length: 0.0
     nosecone_mass: 0.0

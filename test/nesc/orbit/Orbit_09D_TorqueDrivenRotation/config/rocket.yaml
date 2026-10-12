@@ -1,5 +1,4 @@
-# case 9D: as 9C from -0.065 deg/s pitch. APPROXIMATE:
-# the attitude starts nose prograde without spin instead of NESC's LVLH attitude and rates, the force goes along the nose, and the sim can't apply an external torque
+# case 9D: as 9C from -0.065 deg/s pitch.
 # NESC gives the state in J2000, rotated here into the sim's ECI by the earth rotation angle at
 # 2007-11-20T00:00:00 (58.531202 deg), the same rotation the sim applies to the sun and moon
 
@@ -11,6 +10,9 @@ rockets:
     start_in_eci: true
     eci_position_m: [-1426225.051089, 4159940.168814, 5139356.570000]
     eci_velocity_m_s: [-6363.342072, -4023.253265, 1484.521489]
+    # NESC's J2000 attitude rotated by the epoch's earth rotation angle, body to ECI [w, x, y, z]. the sim's nose (+z) is NESC's x
+    initial_attitude_q: [0.0753891518575468, -0.485428867696455, -0.495750560221344, 0.716175029046225]
+    initial_body_rates_rad_s: [-0.0011344542745508, 0.0, 0.0] # NESC's (q, r, p)
 
     nosecone_length: 0.0
     nosecone_mass: 0.0
@@ -28,4 +30,5 @@ rockets:
         length: 50.0
         com_distance: 25.0
         engine_distance: 50.0
+        rcs_max_moment: [10.0, 10.0, 10.0] # schedule_fc's rcs command applies NESC's torque
         thrust_curve: thrust.csv

@@ -1,4 +1,4 @@
-# case 6D: cylinder with 66,400 N along +x body for 48 s from t = 1,000 s. APPROXIMATE: the nose starts prograde but stays inertially fixed, while NESC's vehicle turns with the orbit
+# case 6D: cylinder with 66,400 N along +x body for 48 s from t = 1,000 s.
 # NESC gives the state in J2000, rotated here into the sim's ECI by the earth rotation angle at
 # 2007-11-20T00:00:00 (58.531202 deg), the same rotation the sim applies to the sun and moon
 
@@ -10,6 +10,9 @@ rockets:
     start_in_eci: true
     eci_position_m: [-1426225.051089, 4159940.168814, 5139356.570000]
     eci_velocity_m_s: [-6363.342072, -4023.253265, 1484.521489]
+    # NESC's J2000 attitude rotated by the epoch's earth rotation angle, body to ECI [w, x, y, z]. the sim's nose (+z) is NESC's x
+    initial_attitude_q: [0.124058856753152, -0.475325267445318, -0.42083867218498, 0.762607436485327]
+    initial_body_rates_rad_s: [-0.0011344542745505, 0.0, 0.0] # NESC's (q, r, p)
 
     nosecone_length: 0.0
     nosecone_mass: 0.0

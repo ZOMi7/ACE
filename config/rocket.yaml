@@ -22,6 +22,8 @@ rockets:
     start_in_eci: false # if true, starts at this ECI state
     eci_position_m: [6378137.0, 0.0, 0.0]
     eci_velocity_m_s: [0.0, 465.1, 0.0]
+    initial_attitude_q: [1.0, 0.0, 0.0, 0.0]
+    initial_body_rates_rad_s: [0.0, 0.0, 0.0]
 
     nosecone_length: 3.0
     nosecone_mass: 100.0 # mass of the nosecone/payload on top of the last stage (kg)

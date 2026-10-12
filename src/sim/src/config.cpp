@@ -112,10 +112,8 @@ std::vector<RocketEntry> load_rocket_config(const std::string& path) {
 
     std::vector<RocketEntry> rockets;
 
-    // thrust curve csvs are looked up next to the rocket file
     std::filesystem::path config_dir = std::filesystem::path(path).parent_path();
 
-    // one entry per rocket
     if (root.is_mapping() && root.contains("rockets") && root["rockets"].is_sequence()) {
         size_t ri = 0;
         for (const fkyaml::node& rn : root["rockets"]) {
@@ -151,6 +149,33 @@ std::vector<RocketEntry> load_rocket_config(const std::string& path) {
                 }
                 if (rocket.start_in_orbit) {
                     std::cerr << "config error: '" << path << "' rocket " << ri << " can't set both start_in_orbit and start_in_eci\n";
+                }
+            }
+
+            bool has_q = rn.is_mapping() && rn.contains("initial_attitude_q");
+            bool has_w = rn.is_mapping() && rn.contains("initial_body_rates_rad_s");
+            if ((has_q || has_w) && !rocket.start_in_orbit && !rocket.start_in_eci) {
+                std::cerr << "config error: '" << path << "' rocket " << ri
+                          << " initial_attitude_q and initial_body_rates_rad_s only apply with start_in_orbit or start_in_eci, ignoring\n";
+            } else {
+                if (has_q) {
+                    const fkyaml::node& qn = rn["initial_attitude_q"];
+                    double c[4] = {};
+                    bool ok = qn.is_sequence() && qn.size() == 4;
+                    for (int k = 0; ok && k < 4; k++) {
+                        try { c[k] = qn[k].get_value<double>(); } catch (...) { ok = false; }
+                    }
+                    Quat q = {c[0], c[1], c[2], c[3]};
+                    if (ok && q.norm() > 1e-12) {
+                        rocket.attitude = q.normalize();
+                    } else {
+                        std::cerr << "config error: '" << path << "' rocket " << ri
+                                  << " initial_attitude_q must be 4 numbers [w, x, y, z] (nonzero), using identity\n";
+                    }
+                }
+                if (has_w && !read_vec3(rn, "initial_body_rates_rad_s", rocket.body_rates)) {
+                    std::cerr << "config error: '" << path << "' rocket " << ri
+                              << " initial_body_rates_rad_s must be 3 numbers, using zero\n";
                 }
             }
 

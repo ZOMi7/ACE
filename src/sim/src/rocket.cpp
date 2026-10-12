@@ -25,6 +25,8 @@
  * @param start_in_eci true if the rocket starts at eci_position/eci_velocity
  * @param eci_position starting position in ECI (m)
  * @param eci_velocity starting velocity in ECI (m s^-1)
+ * @param attitude starting body to ECI quaternion when starting in orbit or ECI
+ * @param body_rates starting inertial angular velocity, body frame (rad s^-1), when starting in orbit or ECI
  * @param moon_gravity include the moon's gravity
  * @param sun_gravity include the sun's gravity
  * @param drag include aerodynamic forces
@@ -33,10 +35,10 @@
 Rocket::Rocket(const std::string& rocket_name, double origin_latitude, double origin_longitude, double target_latitude,
                double target_longitude, const RocketProps& rocket_props, bool track_data, double export_interval,
                bool start_in_orbit, const OrbitElements& orbit, bool start_in_eci, const Vec3& eci_position, const Vec3& eci_velocity,
-               bool moon_gravity, bool sun_gravity, bool drag, const Ephemeris* ephem)
+               const Quat& attitude, const Vec3& body_rates, bool moon_gravity, bool sun_gravity, bool drag, const Ephemeris* ephem)
     : moon_gravity(moon_gravity), sun_gravity(sun_gravity), ephem(ephem), drag(drag) {
-    if (start_in_orbit)    set_start_orbit(orbit, target_latitude, target_longitude);
-    else if (start_in_eci) set_start_eci(eci_position, eci_velocity, target_latitude, target_longitude);
+    if (start_in_orbit)    set_start_orbit(orbit, attitude, body_rates, target_latitude, target_longitude);
+    else if (start_in_eci) set_start_eci(eci_position, eci_velocity, attitude, body_rates, target_latitude, target_longitude);
     else                set_start(origin_latitude, origin_longitude, target_latitude, target_longitude);
     props = rocket_props;
     name = rocket_name;
@@ -570,10 +572,12 @@ void Rocket::set_start(double origin_latitude, double origin_longitude, double t
 /**
  * sets the starting position, velocity, and attitude of the rocket from orbital elements
  * @param orbit classical orbital elements the rocket starts on
+ * @param attitude body to ECI quaternion
+ * @param body_rates inertial angular velocity, body frame (rad s^-1)
  * @param target_latitude
  * @param target_longitude
  */
-void Rocket::set_start_orbit(const OrbitElements& orbit, double target_latitude, double target_longitude) {
+void Rocket::set_start_orbit(const OrbitElements& orbit, const Quat& attitude, const Vec3& body_rates, double target_latitude, double target_longitude) {
     double sma = orbit.semi_major_axis * consts::KM_TO_M;
     double e   = orbit.eccentricity;
     double nu  = orbit.true_anomaly * consts::DEG_TO_RAD;
@@ -592,17 +596,19 @@ void Rocket::set_start_orbit(const OrbitElements& orbit, double target_latitude,
     };
     Quat q_pf_to_eci = axis_quat(orbit.raan, {0, 0, 1}) * axis_quat(orbit.inclination, {1, 0, 0}) * axis_quat(orbit.arg_periapsis, {0, 0, 1});
 
-    set_start_eci(rotate_by_quat(q_pf_to_eci, r_perifocal), rotate_by_quat(q_pf_to_eci, v_perifocal), target_latitude, target_longitude);
+    set_start_eci(rotate_by_quat(q_pf_to_eci, r_perifocal), rotate_by_quat(q_pf_to_eci, v_perifocal), attitude, body_rates, target_latitude, target_longitude);
 }
 
 /**
  * sets the starting position, velocity, and attitude of the rocket from an ECI state
  * @param r_eci starting position in ECI (m)
  * @param v_eci starting inertial velocity in ECI (m s^-1)
+ * @param attitude body to ECI quaternion
+ * @param body_rates inertial angular velocity, body frame (rad s^-1)
  * @param target_latitude
  * @param target_longitude
  */
-void Rocket::set_start_eci(const Vec3& r_eci, const Vec3& v_eci, double target_latitude, double target_longitude) {
+void Rocket::set_start_eci(const Vec3& r_eci, const Vec3& v_eci, const Quat& attitude, const Vec3& body_rates, double target_latitude, double target_longitude) {
     set_pos(r_eci);
     v = v_eci;
     start_state.origin_r_eci = r;
@@ -610,13 +616,10 @@ void Rocket::set_start_eci(const Vec3& r_eci, const Vec3& v_eci, double target_l
     // set target position
     start_state.target_r_ecef = lat_lon_to_ecef(target_latitude, target_longitude);
 
-    // point the nose prograde
-    Vec3 u = v.mag() > 1e-9 ? v.unit() : r.unit();
-    Quat q = u.z > -1.0 + 1e-12 ? Quat{1.0 + u.z, -u.y, u.x, 0.0}.normalize() : Quat{0, 1, 0, 0};
-    set_orientation(q);
-    start_state.origin_q_eci = q;
+    set_orientation(attitude);
+    start_state.origin_q_eci = attitude;
 
-    w = {0, 0, 0};
+    w = body_rates;
     a = calc_gravity_accel(r, planet::EARTH.gm, planet::EARTH.j2, planet::EARTH.radius, 0.0);
     a_spec = {0, 0, 0};
 }

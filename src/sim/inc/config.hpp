@@ -15,6 +15,8 @@ struct RocketEntry {
     OrbitElements orbit;
     bool start_in_eci = false; // start from eci_position/eci_velocity instead
     Vec3 eci_position{0, 0, 0}, eci_velocity{0, 0, 0}; // m, m/s
+    Quat attitude{1, 0, 0, 0}; // body to ECI
+    Vec3 body_rates{0, 0, 0};  // inertial angular velocity inbody frame
     double target_lat = 0.0, target_lon = 0.0;
     RocketProps props;
 };
