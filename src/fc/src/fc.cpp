@@ -457,9 +457,9 @@ void FlightController::flight_controller_process(const fc_sensors& sensors, fc_c
         }
     }
 
-    // check if rocket was supposed to be detonated
-    if (cs.detonate_flag) {
-        cmd.detonate = 1;
+    // check if rocket was supposed to be exploded
+    if (cs.launch_abort_flag) {
+        cmd.launch_abort = 1;
     }
 
     // send targeting commands to the engine gimbal system based on target attitude in cs

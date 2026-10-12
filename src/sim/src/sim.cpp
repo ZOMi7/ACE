@@ -102,7 +102,7 @@ namespace sim {
                 r.update_dynamics(t);
 
                 // delete rocket if it exploded
-                if (r.is_detonated()) {
+                if (r.is_exploded()) {
                     r.life_countdown -= consts::TIME_STEP;
                     if (r.life_countdown <= 0) {
                         rocket_list.erase(rocket_list.begin() + i); // r dangles after this

@@ -192,7 +192,7 @@ void DisplayHud::flightData(const HudFrame& hud, const HudView&) {
     RColor stateC = theme::kInactive;
     if (live) {
         bool lifted = (size_t)hud.primary < tracks_.size() && tracks_[hud.primary].lifted;
-        if (p->detonated)          { state = "LOST";  stateC = theme::kWarn; }
+        if (p->exploded)          { state = "LOST";  stateC = theme::kWarn; }
         else if (p->thrust > 0.5f) { state = "BURN";  stateC = theme::kActive; }
         else if (!lifted)          { state = "PAD";   stateC = theme::kPrimary; }
         else                       { state = "COAST"; stateC = theme::kPrimary; }
@@ -337,7 +337,7 @@ void DisplayHud::corner(const HudFrame& hud, const HudView& v) {
     const char* s = fmt("SIM x%.1f     %d FPS", rate_, v.fps);
     Text(s, v.width - kMargin - width(s, kCap), kMargin, kCap, theme::kInactive);
     // A lost vehicle gets a red caution tile, like a warning annunciator.
-    if (hud.primary >= 0 && hud.rockets[hud.primary].detonated) {
+    if (hud.primary >= 0 && hud.rockets[hud.primary].exploded) {
         const char* lost = "VEHICLE LOST";
         int w = width(lost, kVal) + 20;
         int x = v.width - kMargin - w, y = kMargin + 30;
@@ -354,7 +354,7 @@ void DisplayHud::markers(const HudFrame& hud, const HudView& v) const {
         const HudRocket& r = hud.rockets[i];
         ScreenPoint sp = v.project(r.view_pos);
         if (!sp.visible || sp.x < 0 || sp.y < 0 || sp.x > v.width || sp.y > v.height - kKeysH) continue;
-        if (r.detonated) {
+        if (r.exploded) {
             DrawLineV({ sp.x - 5, sp.y - 5 }, { sp.x + 5, sp.y + 5 }, rl(theme::kWarn));
             DrawLineV({ sp.x - 5, sp.y + 5 }, { sp.x + 5, sp.y - 5 }, rl(theme::kWarn));
             Text(r.id.c_str(), (int)sp.x + 9, (int)sp.y - 22, kCap, theme::kWarn);

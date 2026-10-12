@@ -73,7 +73,7 @@ void Rocket::update_flight_controller(double current_time) {
     fc_cmd.light    = 0;
     fc_cmd.cutoff   = 0;
     fc_cmd.separate = 0;
-    fc_cmd.detonate = 0;
+    fc_cmd.launch_abort = 0;
     fc_cmd.cutoff_fraction = 0.0;
 
     fc_update(fc.get(), &sensors, &fc_cmd);
@@ -94,7 +94,7 @@ void Rocket::apply_fc_commands() {
 
     if (fc_cmd.separate) advance_stage(); // clears the engine lock for the fresh stage
     if (fc_cmd.light)    light_engine();
-    if (fc_cmd.detonate) activate_detonation();
+    if (fc_cmd.launch_abort) activate_detonation();
 
     set_engine_orientation(fc_cmd.gimbal);
 

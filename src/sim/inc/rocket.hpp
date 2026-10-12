@@ -192,7 +192,7 @@ class Rocket {
     ///////////////////////////////////////////////////////////////////////////////////////////////
     RocketState get_state() const;
     const std::string& get_name() const { return name; }
-    bool is_detonated() { return detonated; }
+    bool is_exploded() { return exploded; }
     int active_stage_idx() const { return active_idx; } // index the fc's stage array with this
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -219,7 +219,7 @@ class Rocket {
     void set_engine_orientation(Quat orientation);
     void rcs_on() { rcs_active = true; } // enable or disable rcs orientation correction
     void rcs_off() { rcs_active = false; }
-    void activate_detonation() { detonated = true; }
+    void activate_detonation() { exploded = true; }
 
     // rocket owns the flight controller state
     Rocket(Rocket&&) = default;
@@ -315,7 +315,7 @@ class Rocket {
     int num_stages() const { return static_cast<int>(props.stages.size()); }
 
     // rocket explode button
-    bool detonated = false;
+    bool exploded = false;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // helper functions                                                                          //

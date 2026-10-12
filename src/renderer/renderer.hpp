@@ -49,7 +49,7 @@ private:
     void UpdateTrails();
 
     // Draw one rocket's hull + gimballed engine/plume at its ECI state. detTime is
-    // the seconds elapsed since this rocket detonated, or < 0 if it hasn't; when
+    // the seconds elapsed since this rocket exploded, or < 0 if it hasn't; when
     // set, the backend draws the explosion instead of the intact rocket.
     void DrawOneRocket(const RocketState& st, float thrustLevel, double detTime) const;
 
@@ -115,7 +115,7 @@ private:
     std::vector<double> prevFuel_;    // previous propellant sample (-1 = none yet)
 
     // Wall-clock time (backend_.Time()) at which each rocket was first observed with
-    // detonation_active set; -1 = not detonated. The sim keeps publishing a detonated
+    // detonation_active set; -1 = not exploded. The sim keeps publishing a exploded
     // rocket, so we latch the first sighting here and drive the explosion animation
     // off the elapsed time. Indexed to match states_ (reset when the count changes).
     std::vector<double> detStart_;

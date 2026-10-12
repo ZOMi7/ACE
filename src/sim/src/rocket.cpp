@@ -82,7 +82,7 @@ RocketState Rocket::get_state() const {
     s.nose_length = props.nosecone_length;
     s.has_engine  = active_stage().m_fuel_full > 0;
     s.init        = start_state;
-    s.detonation_active = detonated;
+    s.detonation_active = exploded;
     return s;
 }
 

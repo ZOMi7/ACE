@@ -6,15 +6,13 @@ A 6DoF active control testing suite for flight controllers.
 
 ## 1. Dependencies
 
-| what | why | fedora | debian/ubuntu |
-| --- | --- | --- | --- |
-| `g++` with C++20, `gcc` C11, `make` | everything | `gcc-c++ make` | `build-essential` |
-| raylib | raylib renderer (default) | `raylib-devel` | `libraylib-dev` |
-| cmake, glfw | bgfx renderer only | `cmake glfw-devel` | `cmake libglfw3-dev` |
-| git-lfs, unzip | bgfx earth textures only | `git-lfs unzip` | `git-lfs unzip` |
+| what | why | note |
+| --- | --- | --- |
+| `g++` with C++20, `gcc` C11, `make` | self explanatory | 
+| raylib | raylib renderer (default) | 
+| cmake, glfw | bgfx renderer only | 
+| git-lfs, unzip | bgfx earth textures only | `git-lfs unzip` |
 
-macOS and Windows (MinGW) link paths are already in the [Makefile](Makefile); only the
-raylib/glfw packages differ.
 
 ## 2. Downloading
 
@@ -25,8 +23,7 @@ git submodule update --init --recursive   # bgfx.cmake, only needed for `make bg
 
 ## 3. Build
 
-There are two renderers. Both show the same flight: trajectories, trails, labels, pins, telemetry,
-the plume, staging, and detonations. Pick based on how much graphics you want.
+There are two renderers. Pick based on what graphics you want.
 
 **raylib (lightweight):**
 
@@ -36,7 +33,7 @@ The Earth is a smooth sphere with no terrain, and in this build the sim uses tha
 make run
 ```
 
-**bgfx (full graphics):**
+**bgfx (full graphics, experimental):**
 
 Textured Earth with real terrain (the sim's ground follows the bump map), clouds, atmosphere, and
 night lights. Needs the ~500 MB texture archive and the bgfx submodule.
@@ -67,7 +64,7 @@ Camera: `WASD` + `QE` to move, mouse to look, `shift` to boost, `F` to recenter 
 
 ## 4. Configuring the environment (`config/`)
 
-The sim is set up by two YAML files. If you decide not to add a field it will resolve to default.
+The sim is set up by two YAML files. If you decide not to add a field it will resolve to its default.
 
 - `config/sim.yaml`: sim settings (time step and such)
 - `config/rocket.yaml`: every rocket, its geometry, launch site/target, and stages
@@ -204,7 +201,7 @@ void      fc_free(fc_state* state);                                        // on
 `fc_state` is yours: the header only forward declares it, so define `struct fc_state { ... };` in your own source with whatever your controller needs.
 
 
-### What the Sim's API exposes to the flight controller
+### What the Sim's API exposes
 
 `fc_sensors` provides mission time, `dt`, body frame accelerometer and gyro (both
 carrying INS noise from ins.hpp), plus `g`, which is the sim's own gravity at
@@ -215,7 +212,7 @@ reads about `+9.81` along body `+z`, and in free fall it reads about zero. The g
 relative to inertial space, so on the pad it picks up the earth's rotation. To get an inertial
 acceleration, rotate `a_spec` into ECI with your attitude estimate and add your own gravity.
 
-### What you can command
+### API Commands
 
 `fc_update` writes what it wants into `cmd`:
 
@@ -224,7 +221,7 @@ cmd->light = 1;                  // light the active stage
 cmd->cutoff = 1;                 // cut off the active stage (permanent)
 cmd->cutoff_fraction = f;        // optional: burn f of this step first, then cut off
 cmd->separate = 1;
-cmd->detonate = 1;
+cmd->launch_abort = 1;
 cmd->gimbal = q;                 // nozzle in body frame
 cmd->rcs_on = 1;
 cmd->rcs_moment = m;
@@ -232,7 +229,7 @@ cmd->rcs_moment = m;
 
 You can also ask which stage is active with `int stage = fc_active_stage();`.
 
-The sim applies the commands after `fc_update` returns, in a fixed order (cutoff, separate, light, detonate, gimbal, RCS). `light`, `cutoff`, `separate` and `detonate` are one shot and cleared before every step. Gimbal and RCS keep whatever you last wrote.
+The sim applies the commands after `fc_update` returns, in a fixed order (cutoff, separate, light, launch_abort, gimbal, RCS). `light`, `cutoff`, `separate` and `launch_abort` are one shot and cleared before every step. Gimbal and RCS keep whatever you last wrote.
 
 ### Frames
 
@@ -277,4 +274,4 @@ void fc_free(fc_state* s) { free(s); }
 Build it with `make FC_SRC=src/fc/src/my_fc.c && ./program`.
 
 ## AI Disclosure
-All of the simulation, numerical analysis code was written and reviewed by humans. However, all renderer and related non-essential code had varying levels of assistance with LLM models.
+All of the simulation code was written and reviewed by humans. However, all renderer and related non-essential code had varying levels of assistance with LLM models. LLM Assistance was used in building configs for NASA NESC test cases, but all inputs and outputs were verified individually by a human.

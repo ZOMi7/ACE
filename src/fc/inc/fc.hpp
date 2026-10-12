@@ -72,7 +72,7 @@ struct ControlStates {
     bool separate_stage_flag = false; // set to true if you want to separate stage on that step
     bool cutoff_engine_flag = false; // set to true if you want to permanently cut off the engine on that step
     bool final_burn_flag = false; // set to true to burn only final_burn_fraction of this step, then cut off
-    bool detonate_flag = false; // set to true if you want to blow the rocket up
+    bool launch_abort_flag = false; // set to true if you want to blow the rocket up
     double final_burn_fraction = 1.0; // fraction of a full step to burn before the sub step cutoff
     bool payload_deploy_cutoff_done = false; // set once payload_deploy has cut the engine
 

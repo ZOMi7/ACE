@@ -132,7 +132,7 @@ void Renderer::UpdateThrustLevels() {
 }
 
 void Renderer::UpdateDetonations() {
-    // Latch the first frame each rocket is seen detonated, so the explosion animation
+    // Latch the first frame each rocket is seen exploded, so the explosion animation
     // has a stable start time even though the sim keeps republishing the flag. Reset
     // the buffer when the rocket count changes (indices no longer line up).
     const size_t n = states_.size();
@@ -349,7 +349,7 @@ void Renderer::DrawOneRocket(const RocketState& st, float thrustLevel, double de
     // Detonation: anchor the explosion at the rocket's view-space position and let
     // the backend animate off the elapsed time.
     f.center    = ToView(st.r);
-    f.detonated = detTime >= 0.0;
+    f.exploded = detTime >= 0.0;
     f.det_time  = (float)fmax(0.0, detTime);
 
     backend_.DrawRocket(f);
@@ -572,7 +572,7 @@ HudFrame Renderer::BuildHud() const {
         HudRocket hr;
         hr.id        = ids[i];
         hr.view_pos  = ToView(st.r);
-        hr.detonated = i < detStart_.size() && detStart_[i] >= 0.0;
+        hr.exploded = i < detStart_.size() && detStart_[i] >= 0.0;
         hr.thrust    = i < thrustLvl_.size() ? thrustLvl_[i] : 0.0f;
         hr.length    = st.length;
         hr.alt_km    = (rmag - planet::EARTH.radius) * consts::M_TO_KM;

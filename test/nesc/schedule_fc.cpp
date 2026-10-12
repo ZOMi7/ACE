@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // fires the "time command [args]" lines of config/fc_schedule.txt. commands:
-//   light, separate, cutoff, detonate
+//   light, separate, cutoff, launch_abort
 //   rcs x y z        rcs on with this body frame torque (N-m), clamped to the stage's rcs_max_moment
 //   rcs_off
 //   gimbal w x y z   nozzle quaternion relative to the body, clamped to the stage's gimbal_range_deg
@@ -49,7 +49,7 @@ void fc_update(fc_state* s, const fc_sensors* sensors, fc_commands* cmd) {
         const event& e = s->events.front();
         cmd->light |= e.name == "light";
         cmd->separate |= e.name == "separate";
-        cmd->detonate |= e.name == "detonate";
+        cmd->launch_abort |= e.name == "launch_abort";
         cmd->cutoff |= e.name == "cutoff";
         if (e.name == "rcs") {
             cmd->rcs_on = 1;

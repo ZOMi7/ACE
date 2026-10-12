@@ -133,7 +133,7 @@ RocketModel::HullBell RocketModel::buildHullBell(RenderBackend& b, const RocketD
 
 void RocketModel::Draw(RenderBackend& b, const RocketFrame& f) const {
     // Destroyed: the explosion replaces the intact hull + plume entirely.
-    if (f.detonated) { drawDetonation(b, f); return; }
+    if (f.exploded) { drawDetonation(b, f); return; }
 
     // The hull mesh is built nose-at-origin; cm_dist is measured from the top of
     // the stack, below the nosecone, so slide it down by both to land the CoM at

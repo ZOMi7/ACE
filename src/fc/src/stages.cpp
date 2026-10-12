@@ -336,6 +336,6 @@ void FlightController::free_flight() {
     double dist = (cs.r - target_eci).mag();
 
     if (dist < 1000.0) {
-        cs.detonate_flag = true;
+        cs.launch_abort_flag = true;
     }
 }

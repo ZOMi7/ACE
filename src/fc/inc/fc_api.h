@@ -129,17 +129,17 @@ int fc_active_stage(void);
  *   1 - cutoff
  *   2 - separate
  *   3 - light
- *   4 - detonate
+ *   4 - launch_abort
  *   5 - gimbal
  *   6 - rcs_on / rcs_moment
  *
- * light, cutoff, separate and detonate are one shot, the sim clears them before every fc_update.
+ * light, cutoff, separate and launch_abort are one shot, the sim clears them before every fc_update.
  * everything else keeps whatever value you last wrote until you change it
  */
 typedef struct fc_commands {
     int light;              /* light the active stage's solid motor */
     int separate;           /* separate stage and ready the new stage for instructions */
-    int detonate;           /* blows the vehicle up on command (aura purposes) */
+    int launch_abort;           /* blows the vehicle up on command (aura purposes) */
 
     /**
      * kill the active stage's motor (permanent). cutoff_fraction is how much of a full step's worth
