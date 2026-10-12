@@ -48,6 +48,36 @@ inline Vec3 surface_velocity_eci(const Vec3& r_eci) {
     return {-planet::EARTH.rotation_rate * r_eci.y, planet::EARTH.rotation_rate * r_eci.x, 0.0};
 }
 
+struct Mat3 {
+    double m[3][3] = {};
+
+    Vec3 operator*(const Vec3& v) const {
+        return {
+            m[0][0]*v.x + m[0][1]*v.y + m[0][2]*v.z,
+            m[1][0]*v.x + m[1][1]*v.y + m[1][2]*v.z,
+            m[2][0]*v.x + m[2][1]*v.y + m[2][2]*v.z,
+        };
+    }
+
+    // inverse from the adjugate, assumes the matrix isn't singular
+    Mat3 inverse() const {
+        Mat3 r;
+        r.m[0][0] = m[1][1]*m[2][2] - m[1][2]*m[2][1];
+        r.m[0][1] = m[0][2]*m[2][1] - m[0][1]*m[2][2];
+        r.m[0][2] = m[0][1]*m[1][2] - m[0][2]*m[1][1];
+        r.m[1][0] = m[1][2]*m[2][0] - m[1][0]*m[2][2];
+        r.m[1][1] = m[0][0]*m[2][2] - m[0][2]*m[2][0];
+        r.m[1][2] = m[0][2]*m[1][0] - m[0][0]*m[1][2];
+        r.m[2][0] = m[1][0]*m[2][1] - m[1][1]*m[2][0];
+        r.m[2][1] = m[0][1]*m[2][0] - m[0][0]*m[2][1];
+        r.m[2][2] = m[0][0]*m[1][1] - m[0][1]*m[1][0];
+        double det = m[0][0]*r.m[0][0] + m[0][1]*r.m[1][0] + m[0][2]*r.m[2][0];
+        for (auto& row : r.m)
+            for (double& x : row) x /= det;
+        return r;
+    }
+};
+
 struct Mat4 {
     double m[4][4] = {};
 

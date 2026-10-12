@@ -82,6 +82,23 @@ SimConfig load_sim_config(const std::string& path) {
     cfg.ephemeris = value_or(root, "ephemeris", cfg.ephemeris);
     cfg.epoch = value_or(root, "epoch", cfg.epoch);
 
+    std::string gravity = value_or(root, "gravity", std::string("j2"));
+    cfg.inverse_square_gravity = gravity == "inverse_square";
+    if (gravity != "j2" && gravity != "inverse_square") {
+        std::cerr << "config error: '" << path << "' gravity must be j2 or inverse_square, using j2\n";
+    }
+    cfg.earth_rotation = value_or(root, "earth_rotation", cfg.earth_rotation);
+    cfg.earth_gm = value_or(root, "earth_gm", cfg.earth_gm);
+    cfg.earth_j2 = value_or(root, "earth_j2", cfg.earth_j2);
+    cfg.earth_radius = value_or(root, "earth_radius", cfg.earth_radius);
+    cfg.moon_gm = value_or(root, "moon_gm", cfg.moon_gm);
+    if (cfg.earth_gm <= 0 || cfg.earth_radius <= 0 || cfg.moon_gm <= 0) {
+        std::cerr << "config error: '" << path << "' earth_gm, earth_radius, and moon_gm must be > 0, using defaults\n";
+        cfg.earth_gm = planet::EARTH.gm;
+        cfg.earth_radius = planet::EARTH.radius;
+        cfg.moon_gm = planet::MOON.gm;
+    }
+
     return cfg;
 }
 
@@ -140,6 +157,27 @@ std::vector<RocketEntry> load_rocket_config(const std::string& path) {
             rocket.props.nosecone_length = value_or(rn, "nosecone_length", rocket.props.nosecone_length);
             rocket.props.nosecone_mass = value_or(rn, "nosecone_mass", rocket.props.nosecone_mass);
             rocket.props.nosecone_com_distance = value_or(rn, "nosecone_com_distance", (2.0 / 3.0) * rocket.props.nosecone_length);
+
+            if (rn.is_mapping() && rn.contains("inertia_kg_m2")) {
+                const fkyaml::node& in = rn["inertia_kg_m2"];
+                double I[6] = {};
+                bool ok = in.is_sequence() && in.size() == 6;
+                for (int k = 0; ok && k < 6; k++) {
+                    try { I[k] = in[k].get_value<double>(); } catch (...) { ok = false; }
+                }
+                ok = ok && I[0] > 0 && I[1] > 0 && I[2] > 0;
+                if (ok) {
+                    Mat3& T = rocket.props.inertia;
+                    T.m[0][0] = I[0]; T.m[1][1] = I[1]; T.m[2][2] = I[2];
+                    T.m[0][1] = T.m[1][0] = -I[3];
+                    T.m[0][2] = T.m[2][0] = -I[4];
+                    T.m[1][2] = T.m[2][1] = -I[5];
+                    rocket.props.fixed_inertia = true;
+                } else {
+                    std::cerr << "config error: '" << path << "' rocket " << ri
+                              << " inertia_kg_m2 must be 6 numbers [Ixx, Iyy, Izz, Ixy, Ixz, Iyz] with positive moments, ignoring\n";
+                }
+            }
 
             bool has_stages = rn.is_mapping() && rn.contains("stage") && rn["stage"].is_sequence();
             if (!has_stages || rn["stage"].empty()) {

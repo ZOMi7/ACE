@@ -7,3 +7,7 @@ max_time: 28800.0    # seconds
 moon_gravity: false
 sun_gravity: false
 drag: false
+
+# NESC's orbital constants
+gravity: inverse_square
+earth_gm: 3.98600436e14

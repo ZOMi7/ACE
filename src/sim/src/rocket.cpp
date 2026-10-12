@@ -130,18 +130,13 @@ Vec3 Rocket::nose_direction_eci(const Quat& q) const {
 /**
  * angular acceleration in the body frame
  * @param w_i angular velocity of the body in the body frame
- * @param I moments of inertia about the body axes
+ * @param I inertia tensor about the CoM, body frame
+ * @param I_inv inverse of I
  * @param net_torque net torque on the body in the body frame
  * @return angular acceleration in the body frame
  */
-static Vec3 ang_accel(const Vec3& w_i, const Vec3& I, const Vec3& net_torque) {
-    Vec3 Iw = {I.x * w_i.x, I.y * w_i.y, I.z * w_i.z};
-    Vec3 gyro = w_i.cross(Iw);
-    return Vec3{
-        (net_torque.x - gyro.x) / I.x,
-        (net_torque.y - gyro.y) / I.y,
-        (net_torque.z - gyro.z) / I.z,
-    };
+static Vec3 ang_accel(const Vec3& w_i, const Mat3& I, const Mat3& I_inv, const Vec3& net_torque) {
+    return I_inv * (net_torque - w_i.cross(I * w_i));
 }
 
 /**
@@ -212,23 +207,21 @@ bool Rocket::is_rocket_on_ground(double com_dist_from_gnd) {
  * change in contact point velocity from an impulse J applied there (body frame)
  * @param r_c position of the contact point relative to the center of mass, in the body frame
  * @param J impulse applied at the contact point, in the body frame
- * @param I principal moments of inertia about the body axes
+ * @param I_inv inverse inertia tensor in the body frame
  * @param m mass of the rocket
  * @return change in velocity of the contact point in the body frame
  */
-static Vec3 contact_vel_change(const Vec3& r_c, const Vec3& J, const Vec3& I, double m) {
-    Vec3 ang = r_c.cross(J);
-    Vec3 dw = {ang.x / I.x, ang.y / I.y, ang.z / I.z};
+static Vec3 contact_vel_change(const Vec3& r_c, const Vec3& J, const Mat3& I_inv, double m) {
+    Vec3 dw = I_inv * r_c.cross(J);
     return J / m + dw.cross(r_c);
 }
 
 /**
  * specific ground dynamics are applied when the rocket is on the ground
- * @param I moment of inertia of the vehicle at the current state
  * @param m_end the current mass at the final step of rk4
  * @param dt time step
  */
-void Rocket::apply_ground_dynamics(const Vec3& I, double m_end, double dt) {
+void Rocket::apply_ground_dynamics(double m_end, double dt) {
     // the ground supplies whatever force keeps the rocket riding along with the surface
     Vec3 w_earth = {0, 0, planet::EARTH.rotation_rate};
     a = w_earth.cross(w_earth.cross(r));
@@ -254,24 +247,21 @@ void Rocket::apply_ground_dynamics(const Vec3& I, double m_end, double dt) {
     // ground pushes when the contact point moves into it
     double v_into_gnd = v_contact.dot(up_body);
     if (v_into_gnd < 0) {
-        Vec3 impulse_body = up_body * (-v_into_gnd / contact_vel_change(r_contact_from_cm, up_body, I, m_end).dot(up_body));
+        Vec3 impulse_body = up_body * (-v_into_gnd / contact_vel_change(r_contact_from_cm, up_body, I_inv, m_end).dot(up_body));
 
         // friction stops the contact point sliding
-        Vec3 v_slip = v_contact + contact_vel_change(r_contact_from_cm, impulse_body, I, m_end);
+        Vec3 v_slip = v_contact + contact_vel_change(r_contact_from_cm, impulse_body, I_inv, m_end);
         v_slip -= up_body * v_slip.dot(up_body);
         if (v_slip.mag() > 1e-9) {
             Vec3 slip_dir = v_slip.unit();
-            double friction = std::min(v_slip.mag() / contact_vel_change(r_contact_from_cm, slip_dir, I, m_end).dot(slip_dir),
+            double friction = std::min(v_slip.mag() / contact_vel_change(r_contact_from_cm, slip_dir, I_inv, m_end).dot(slip_dir),
                                        consts::GROUND_FRICTION_COEFF * impulse_body.mag());
             impulse_body -= slip_dir * friction;
         }
 
         // the impulse at the contact point changes both the CoM velocity and the spin
         v += rotate_by_quat(q_rocket, impulse_body / m_end);
-        Vec3 ang_impulse = r_contact_from_cm.cross(impulse_body);
-        w.x += ang_impulse.x / I.x;
-        w.y += ang_impulse.y / I.y;
-        w.z += ang_impulse.z / I.z;
+        w += I_inv * r_contact_from_cm.cross(impulse_body);
     }
 
     // take away rotational energy modified by some energy loss factor that I lwk made up
@@ -314,7 +304,6 @@ KinematicModifier Rocket::kinematic_state(double m_i, const Vec3& r_i, const Vec
 void Rocket::update_dynamics(double current_time) {
     // rocket mass
     double m = m_current;
-    Vec3 I = I_body;
 
     // time step for the simulation
     double dt = consts::TIME_STEP;
@@ -340,7 +329,7 @@ void Rocket::update_dynamics(double current_time) {
     KinematicModifier k1 = kinematic_state(m, r, v, q_rocket, w, props, t_burn, current_time);
     Vec3 k1_r = v;
     Vec3 k1_v = k1.accel;
-    Vec3 k1_w = ang_accel(w, I, k1.torque);
+    Vec3 k1_w = ang_accel(w, I_body, I_inv, k1.torque);
     Quat k1_q = quat_deriv(q_rocket, w);
 
     ////////////////////////////////////
@@ -353,7 +342,7 @@ void Rocket::update_dynamics(double current_time) {
     KinematicModifier k2 = kinematic_state(m_mid, r2, v2, q2, w2, props, t_burn + dt / 2, current_time + dt / 2);
     Vec3 k2_r = v2;
     Vec3 k2_v = k2.accel;
-    Vec3 k2_w = ang_accel(w2, I, k2.torque);
+    Vec3 k2_w = ang_accel(w2, I_body, I_inv, k2.torque);
     Quat k2_q = quat_deriv(q2, w2);
 
     ////////////////////////////////////
@@ -366,7 +355,7 @@ void Rocket::update_dynamics(double current_time) {
     KinematicModifier k3 = kinematic_state(m_mid, r3, v3, q3, w3, props, t_burn + dt / 2, current_time + dt / 2);
     Vec3 k3_r = v3;
     Vec3 k3_v = k3.accel;
-    Vec3 k3_w = ang_accel(w3, I, k3.torque);
+    Vec3 k3_w = ang_accel(w3, I_body, I_inv, k3.torque);
     Quat k3_q = quat_deriv(q3, w3);
 
     ////////////////////////////////////
@@ -379,7 +368,7 @@ void Rocket::update_dynamics(double current_time) {
     KinematicModifier k4 = kinematic_state(m_end, r4, v4, q4, w4, props, t_burn + dt, current_time + dt);
     Vec3 k4_r = v4;
     Vec3 k4_v = k4.accel;
-    Vec3 k4_w = ang_accel(w4, I, k4.torque);
+    Vec3 k4_w = ang_accel(w4, I_body, I_inv, k4.torque);
     Quat k4_q = quat_deriv(q4, w4);
 
     ////////////////////////////////////
@@ -432,7 +421,7 @@ void Rocket::update_dynamics(double current_time) {
     // update acceleration of the body as consistent with RK4
     if (on_ground) {
         // apply dynamics to body but special because its touching the ground
-        apply_ground_dynamics(I, m_end, dt);
+        apply_ground_dynamics(m_end, dt);
     }
     else {
         // calculate RK4 total acceleration vector
@@ -516,7 +505,14 @@ void Rocket::update_mass() {
     I_trans += m_nose * (R2 / 4.0 + h * h / 18.0) + m_nose * d_nose * d_nose;
     I_axial += 0.5 * R2 * m_nose;
 
-    I_body = { I_trans, I_trans, I_axial };
+    if (props.fixed_inertia) {
+        I_body = props.inertia;
+    } else {
+        I_body = {};
+        I_body.m[0][0] = I_body.m[1][1] = I_trans;
+        I_body.m[2][2] = I_axial;
+    }
+    I_inv = I_body.inverse();
 }
 
 /**

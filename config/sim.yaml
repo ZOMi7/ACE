@@ -12,3 +12,8 @@ epoch: "2026-10-10T12:00:00"    # UTC date and time at sim start
 
 # aerodynamics
 drag: true
+
+# earth model
+gravity: j2           # j2 or inverse_square
+earth_rotation: true
+# earth_gm, earth_j2, earth_radius, and moon_gm can be added to override values in planetary_constants.hpp

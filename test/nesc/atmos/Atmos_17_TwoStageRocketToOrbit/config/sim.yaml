@@ -7,3 +7,6 @@ max_time: 200.0    # seconds
 moon_gravity: false
 sun_gravity: false
 drag: true
+
+# NESC's atmospheric WGS-84 earth
+earth_j2: 0.00108262982

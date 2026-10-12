@@ -10,3 +10,8 @@ drag: false
 
 ephemeris: ../../../../config/de440s.bsp
 epoch: "2007-11-20T00:00:00"
+
+# NESC's orbital constants
+gravity: inverse_square
+earth_gm: 3.98600436e14
+moon_gm: 4.90266e12

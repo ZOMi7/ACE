@@ -28,6 +28,12 @@ struct SimConfig {
     bool drag = true;
     std::string ephemeris = "config/de440s.bsp";
     std::string epoch = "2026-01-01T00:00:00";
+    bool inverse_square_gravity = false;
+    bool earth_rotation = true;
+    double earth_gm = planet::EARTH.gm;
+    double earth_j2 = planet::EARTH.j2;
+    double earth_radius = planet::EARTH.radius;
+    double moon_gm = planet::MOON.gm;
 };
 
 // reads the sims config file

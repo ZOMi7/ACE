@@ -1,5 +1,4 @@
-# case 6D: cylinder with 66,400 N along +x body for 48 s from t = 1,000 s. APPROXIMATE: the sim always includes J2 gravity, so the orbit drifts from NESC's inverse square one,
-# and the nose starts prograde but stays inertially fixed, while NESC's vehicle turns with the orbit
+# case 6D: cylinder with 66,400 N along +x body for 48 s from t = 1,000 s. APPROXIMATE: the nose starts prograde but stays inertially fixed, while NESC's vehicle turns with the orbit
 # NESC gives the state in J2000, rotated here into the sim's ECI by the earth rotation angle at
 # 2007-11-20T00:00:00 (58.531202 deg), the same rotation the sim applies to the sun and moon
 
@@ -14,6 +13,7 @@ rockets:
 
     nosecone_length: 0.0
     nosecone_mass: 0.0
+    inertia_kg_m2: [12250.0, 12250.0, 500.0, 0.0, 0.0, 0.0] # NESC's cylinder, its x axis is the sim's z (nose)
 
     # 12 m x 1 m, 1,000 kg uniform cylinder. a token amount of fuel lets the engine apply NESC's force
     # without the mass changing

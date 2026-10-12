@@ -1,4 +1,4 @@
-# case 9D: as 9C from -0.065 deg/s pitch. APPROXIMATE: the sim always includes J2 gravity, so the orbit drifts from NESC's inverse square one,
+# case 9D: as 9C from -0.065 deg/s pitch. APPROXIMATE:
 # the attitude starts nose prograde without spin instead of NESC's LVLH attitude and rates, the force goes along the nose, and the sim can't apply an external torque
 # NESC gives the state in J2000, rotated here into the sim's ECI by the earth rotation angle at
 # 2007-11-20T00:00:00 (58.531202 deg), the same rotation the sim applies to the sun and moon
@@ -14,8 +14,10 @@ rockets:
 
     nosecone_length: 0.0
     nosecone_mass: 0.0
+    # NESC's ISS inertia. its x axis is the sim's z (nose), y is the sim's x, z is the sim's y
+    inertia_kg_m2: [9.1e7, 1.64e8, 1.02e8, -5.9e5, 6.96e6, 5.48e6]
 
-    # 400,000 kg ISS-like vehicle. its inertia comes from this shape, NESC's full inertia tensor can't be set
+    # 400,000 kg ISS, the cylinder only sets its size
     stage:
       - id: 1
         geometry:

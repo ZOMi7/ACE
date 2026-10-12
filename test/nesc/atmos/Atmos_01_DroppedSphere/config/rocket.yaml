@@ -13,6 +13,7 @@ rockets:
 
     nosecone_length: 0.0
     nosecone_mass: 0.0
+    inertia_kg_m2: [4.880945, 4.880945, 4.880945, 0.0, 0.0, 0.0] # NESC's 3.6 slug ft^2
 
     # 1 slug, 6 in diameter cannonball
     stage:

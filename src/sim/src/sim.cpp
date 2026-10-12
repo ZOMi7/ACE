@@ -15,10 +15,31 @@
 namespace sim {
 
     /**
-     * @brief initial constsructor for the sim, starts time at 0
+     * @brief initial constsructor for the sim, starts time at 0 and reads config/sim.yaml
+     * (before the renderer exists, so it sees the configured earth)
      */
     Sim::Sim() {
         t = 0.0; // start at time 0
+
+        // load config file stuff into the sim class and apply relevant constants
+        SimConfig config = load_sim_config("config/sim.yaml");
+        consts::TIME_STEP = config.time_step;
+        consts::STEP_DELAY = config.step_delay;
+        max_time = config.max_time;
+        moon_gravity = config.moon_gravity;
+        sun_gravity = config.sun_gravity;
+        drag = config.drag;
+
+        planet::EARTH.gm = config.earth_gm;
+        if (config.inverse_square_gravity) {
+            planet::EARTH.j2 = 0.0;
+        } 
+        else {
+            planet::EARTH.j2 = config.earth_j2;
+        }
+        planet::EARTH.radius = config.earth_radius;
+        if (!config.earth_rotation) planet::EARTH.rotation_rate = 0.0;
+        planet::MOON.gm = config.moon_gm;
     }
     /**
      * @brief destructor for the sim
@@ -42,17 +63,6 @@ namespace sim {
         ///////////////////////////////////////////////////////////////////////////////////////////////
         // rocket placement process                                                                  //
         ///////////////////////////////////////////////////////////////////////////////////////////////
-        SimConfig config = load_sim_config("config/sim.yaml");
-        consts::TIME_STEP = config.time_step;
-        consts::STEP_DELAY = config.step_delay;
-        moon_gravity = config.moon_gravity;
-        sun_gravity = config.sun_gravity;
-        drag = config.drag;
-        if ((moon_gravity || sun_gravity) && !ephem.load(config.ephemeris, config.epoch)) {
-            std::cerr << "config error: sun and moon gravity disabled\n";
-            moon_gravity = sun_gravity = false;
-        }
-
         for (const RocketEntry& rocket : load_rocket_config("config/rocket.yaml")) {
             rocket_list.emplace_back(rocket.name, rocket.origin_lat, rocket.origin_lon, rocket.target_lat, rocket.target_lon,
                                      rocket.props, rocket.track_data, rocket.export_interval,
@@ -67,7 +77,7 @@ namespace sim {
         wall_clock::time_point next_publish = wall_clock::now();
 
         // stop once max_time is reached
-        while (running.load() && (config.max_time <= 0 || t < config.max_time - 1e-9)) {
+        while (running.load() && (max_time <= 0 || t < max_time - 1e-9)) {
 
             ///////////////////////////////////////////////////////////////////////////////////////////////
             // sim                                                                                       //

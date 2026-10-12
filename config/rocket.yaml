@@ -27,6 +27,7 @@ rockets:
     nosecone_mass: 100.0 # mass of the nosecone/payload on top of the last stage (kg)
     nosecone_com_distance: 2.0 # nosecone CoM back from the nose tip (m), defaults to 2/3 of nosecone_length if omitted
     no_fc: false # if true, this rocket spawns without a flight controller (no guidance/autopilot)
+    # inertia_kg_m2: [Ixx, Iyy, Izz, Ixy, Ixz, Iyz] # ability to import your own instead of using in-sim estimation model 
 
     stage:
       - id: 1

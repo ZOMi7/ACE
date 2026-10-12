@@ -7,3 +7,7 @@ max_time: 30.0    # seconds
 moon_gravity: false
 sun_gravity: false
 drag: true
+
+# NESC's round rotating earth
+gravity: inverse_square
+earth_radius: 6371007.1809

@@ -1,5 +1,5 @@
 # case 3: brick dropped from 30,000 ft with rotational damping but no drag. APPROXIMATE: the sim's
-# drag toggle also removes its damping and the 10/20/30 deg/s spin can't be set, so this flies like case 2
+# drag toggle also removes its damping and the initial attitude and 10/20/30 deg/s spin can't be set yet, so this flies like case 2
 # ECI is ECEF at t = 0, so lat 0 lon 0 lies on +x and the inertial velocity is the
 # earth relative velocity plus the earth's spin (w x r, w = 7.292115e-5 rad/s)
 
@@ -14,8 +14,10 @@ rockets:
 
     nosecone_length: 0.0
     nosecone_mass: 0.0
+    # NESC's brick inertia. its x (long) axis is the sim's z (nose), y is the sim's x, z is the sim's y
+    inertia_kg_m2: [0.008421011, 0.009754656, 0.002568217, 0.0, 0.0, 0.0]
 
-    # 8 x 4 x 2.25 in brick as a cylinder with the same mass and long axis inertia
+    # 8 x 4 x 2.25 in brick, the cylinder only sets its size
     stage:
       - id: 1
         geometry:

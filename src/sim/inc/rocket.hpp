@@ -153,6 +153,8 @@ struct RocketProps {
     double nosecone_mass = 0; // mass of the nosecone (kg)
     double nosecone_com_distance = 0; // nosecone CoM measured back from the nose tip (m)
     std::vector<Stage> stages;
+    bool fixed_inertia = false; // use inertia for sim as opposed to the integrator
+    Mat3 inertia;               // about the CoM, body frame
 
     // widest stage radius from stage `first` up to the nose (m)
     double max_radius(int first = 0) const {
@@ -282,7 +284,8 @@ class Rocket {
     // mass properties
     double m_current = 0;        // current total mass (kg)
     double m_fuel_current = 0;   // current total fuel mass (kg)
-    Vec3 I_body = {0, 0, 0};     // moments of inertia about the combined CoM, body frame
+    Mat3 I_body;                 // inertia tensor about the combined CoM, body
+    Mat3 I_inv;                  // its inverse
     double z_cm = 0;             // combined CoM along body +z, from the active stage's aft edge (m)
     double z_cp = 0;             // center of pressure along body +z, from the active stage's aft edge (m)
 
@@ -323,7 +326,7 @@ class Rocket {
     void set_start_eci(const Vec3& r_eci, const Vec3& v_eci, double target_latitude, double target_longitude); // sets the starting and target for ECI position and velocity
     
     // kinematic helpers
-    void apply_ground_dynamics(const Vec3& I, double m_end, double dt);
+    void apply_ground_dynamics(double m_end, double dt);
 
     // every acceleration (ECI) and every torque about the CoM (body) acting on the rocket
     KinematicModifier kinematic_state(double m_i, const Vec3& r_i, const Vec3& v_i, const Quat& q_i, const Vec3& w_i, const RocketProps& props, double t_burn, double t); // gravity + drag + thrust + rcs

@@ -17,7 +17,7 @@ struct planetaryBody {
 };
 
 // EARTH
-inline constexpr planetaryBody EARTH {
+inline planetaryBody EARTH {
     .radius = 6378137.0,
     .rotation_rate = 7.292115e-5,
     .gm = 3.986004418e14,
@@ -26,7 +26,7 @@ inline constexpr planetaryBody EARTH {
 };
 
 // MOON
-inline constexpr planetaryBody MOON {
+inline planetaryBody MOON {
     .radius = 1737400.0,
     .rotation_rate = 2.6617e-6,
     .gm = 4.9028e12,
@@ -35,7 +35,7 @@ inline constexpr planetaryBody MOON {
 };
 
 // SUN
-inline constexpr planetaryBody SUN {
+inline planetaryBody SUN {
     .radius = 6.957e8,
     .rotation_rate = 2.9032e-6,
     .gm = 1.32712440018e20,
