@@ -29,6 +29,10 @@ namespace sim {
         moon_gravity = config.moon_gravity;
         sun_gravity = config.sun_gravity;
         drag = config.drag;
+        if ((moon_gravity || sun_gravity) && !ephem.load(config.ephemeris, config.epoch)) {
+            std::cerr << "config error: sun and moon gravity disabled\n";
+            moon_gravity = sun_gravity = false;
+        }
 
         planet::EARTH.gm = config.earth_gm;
         if (config.inverse_square_gravity) {
