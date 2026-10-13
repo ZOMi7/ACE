@@ -16,7 +16,8 @@ public:
     void Init();
     void Shutdown();
 
-    void Draw(wire::Pipeline& p, const EarthFrame& f);
+    // `sun` (unit, view space) lights the outlines; null leaves them unlit.
+    void Draw(wire::Pipeline& p, const EarthFrame& f, const RVec3* sun);
 
 private:
     wire::GpuMesh mesh_;

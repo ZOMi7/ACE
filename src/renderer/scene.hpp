@@ -12,6 +12,15 @@
 
 namespace renderer {
 
+// One stage's outer shape (metres). Cones point forward; a sphere's length is
+// its diameter.
+struct HullSection {
+    enum Kind { Cylinder, Cone, Sphere } kind;
+    double radius;
+    double length;
+    bool operator==(const HullSection&) const = default;
+};
+
 // Static rocket dimensions (metres). Changes at staging; the backend rebuilds
 // its meshes when these move.
 struct RocketDims {
@@ -20,6 +29,7 @@ struct RocketDims {
     double radius;
     double engine_dist;
     double nose_length;
+    std::vector<HullSection> sections;   // active stage first, nosecone excluded
 };
 
 // Everything needed to draw the rocket for one frame. Transforms are already in
@@ -94,6 +104,14 @@ struct EarthFrame {
     // is visible between the ground and a rocket sitting on it; the terrain
     // anchors its chunks from this instead.
     Vec3  center_km;
+};
+
+// The sun and moon at their real positions and sizes, from the ephemeris, for
+// backends that draw them.
+struct SkyFrame {
+    RVec3 sun, moon;                 // centres, view space (km)
+    float sun_radius, moon_radius;   // km
+    RVec3 sun_dir;                   // unit view-space direction from the Earth to the sun
 };
 
 }

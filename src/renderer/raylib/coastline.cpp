@@ -93,7 +93,7 @@ void Coastline::Init() {
 
 void Coastline::Shutdown() { wire::Destroy(mesh_); }
 
-void Coastline::Draw(wire::Pipeline& p, const EarthFrame& f) {
+void Coastline::Draw(wire::Pipeline& p, const EarthFrame& f, const RVec3* sun) {
     if (!mesh_.vao) return;
 
     const Vec3   eye = { f.cam_pos.x, f.cam_pos.y, f.cam_pos.z };
@@ -109,6 +109,7 @@ void Coastline::Draw(wire::Pipeline& p, const EarthFrame& f) {
 
     wire::Shading s;
     s.tint = theme::withAlpha(theme::kCoast, (unsigned char)(fade * 255.0));
+    if (sun) { s.light = *sun; s.night = 0.4f; }
     p.Edges(mesh_, model, s);
 }
 

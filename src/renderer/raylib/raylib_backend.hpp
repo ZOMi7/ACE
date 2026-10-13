@@ -7,14 +7,16 @@
 #include "ground.hpp"
 #include "hud.hpp"
 #include "models.hpp"
+#include "sky.hpp"
 #include "wire.hpp"
 
 namespace renderer {
 
 // Lightweight raylib backend (`make`): no bgfx, no textures, no shaders beyond
 // one tiny wireframe program. Every solid is drawn as its hidden-line outline
-// (wire.hpp), the Earth as an LOD grid over a smooth sphere (earth.hpp), and
-// the overlays the renderer submits as lines are streamed straight to the GPU.
+// (wire.hpp), the Earth as an LOD grid over a smooth sphere (earth.hpp), the
+// sun and moon where they really are (sky.hpp), and the overlays the renderer
+// submits as lines are streamed straight to the GPU.
 // Styled after aircraft displays (theme.hpp, hud.hpp).
 class RaylibBackend : public RenderBackend {
 public:
@@ -44,6 +46,8 @@ public:
     void DrawLines(const LineVertex* v, size_t count, float width) override;
     void DrawRocket(const RocketFrame& f) override;
     void DrawEarth(const EarthFrame& f) override;
+    void DrawSky(const SkyFrame& f) override;
+    void DrawLabel(const RVec3& pos, const char* text, RColor c) override;
 
     void DrawRect(int x, int y, int w, int h, RColor c) override;
     void DrawRectLines(int x, int y, int w, int h, RColor c) override;
@@ -66,12 +70,17 @@ private:
     std::vector<LineVertex> remapped_;   // DrawLines input in the display palette
     std::vector<WorldLabel> labels_;     // 3D-anchored text for the HUD, per frame
 
+    // Direction to the sun this frame (view space), once DrawSky has run.
+    RVec3 sunDir_ { 0, 1, 0 };
+    bool  haveSun_ = false;
+
     // Last camera handed to Begin3D, kept for the Earth's LOD and WorldToScreen.
     RCamera  cam_{};
     Camera3D cam3d_{};
 
     // Backend-owned scene objects.
     WireEarth   earth_;
+    Sky         sky_;
     Coastline   coast_;
     GroundMarks ground_;
     RocketModel rocket_;

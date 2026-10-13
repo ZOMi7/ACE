@@ -54,6 +54,10 @@ struct Shading {
     // horizon. Needs vertex normals that point out of the surface.
     bool   grazeFade = false;
     RVec3  eye { 0, 0, 0 };
+    // Sunlight: edges whose surface faces away from `light` (unit, view space)
+    // dim to `night` of their colour. 0 = unlit.
+    RVec3  light { 0, 1, 0 };
+    float  night = 0.0f;
 };
 
 class Pipeline {
@@ -68,8 +72,9 @@ public:
     // Rotate the streamed line buffers. Call once per frame after the swap.
     void NextFrame();
 
-    // Hidden-line occluder: the mesh's triangles in the background colour.
-    void Fill(const GpuMesh& m, const RMat4& model);
+    // Hidden-line occluder: the mesh's triangles in the background colour, or in
+    // `color` when it isn't fully transparent (a solid shape).
+    void Fill(const GpuMesh& m, const RMat4& model, RColor color = { 0, 0, 0, 0 });
     // The mesh's outline. Blend mode and depth writes are left to the caller.
     void Edges(const GpuMesh& m, const RMat4& model, const Shading& s);
     // Transient view-space line list (pairs), streamed to the GPU.
@@ -79,7 +84,7 @@ private:
     enum class Mode { None, Fill, Edges, Lines };
     void use(Mode m);
     void setMatrices(const RMat4& model);
-    void setShading(const Shading& s, bool fill);
+    void setShading(const Shading& s, const float* fill);
 
     // Streamed lines go to a different buffer each frame, so a frame never
     // writes into one the GPU may still be reading.
@@ -90,13 +95,13 @@ private:
 
     unsigned prog_ = 0;
     int locMvp_ = -1, locModel_ = -1, locTint_ = -1, locFill_ = -1,
-        locHeat_ = -1, locGraze_ = -1;
+        locHeat_ = -1, locGraze_ = -1, locLight_ = -1;
 
     Mode  mode_ = Mode::None;
     RMat4 viewProj_ = rmath::identity();
     float bg_[4] = { 0, 0, 0, 1 };
     // Last uniform values sent, so unchanged ones aren't re-sent every draw.
-    float tint_[4] = {}, fill_[4] = {}, heat_[4] = {}, graze_[4] = {};
+    float tint_[4] = {}, fill_[4] = {}, heat_[4] = {}, graze_[4] = {}, light_[4] = {};
 };
 
 }

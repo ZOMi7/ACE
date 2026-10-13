@@ -66,6 +66,10 @@ public:
     // shaders and renders the supplied domain frame however it likes).
     virtual void DrawRocket(const RocketFrame& f) = 0;
     virtual void DrawEarth(const EarthFrame& f) = 0;
+    // Optional: the sun and moon, drawn before the Earth.
+    virtual void DrawSky(const SkyFrame& /*f*/) {}
+    // Optional: text pinned to a view-space point, drawn with the HUD.
+    virtual void DrawLabel(const RVec3& /*pos*/, const char* /*text*/, RColor /*c*/) {}
 
     // 2D overlay (screen-space, drawn after End3D).
     virtual void DrawRect(int x, int y, int w, int h, RColor c) = 0;

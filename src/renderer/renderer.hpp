@@ -27,14 +27,20 @@ private:
     void UpdateDetonations();
     RCamera BuildCamera() const;
     void DrawFrame(const RCamera& cam);
+    void DrawSky() const;
     void DrawEarth(const RCamera& cam, RVec3 earthC);
     void DrawECIAxes() const;
     void DrawBodyAxes() const;
-    void DrawStateVectors() const;
-    void DrawSurfaceMarkers() const;
+    void DrawStateVectors(const RCamera& cam) const;
+    void DrawSurfaceMarkers(const RCamera& cam) const;
     void DrawRocket() const;
-    void DrawPredictedTrajectory() const;
+    void DrawPredictedTrajectory(const RCamera& cam) const;
     void DrawTrails() const;
+
+    // Is this view-space point hidden behind the Earth from the camera?
+    bool BehindEarth(const RVec3& p, const RCamera& cam) const;
+    // Closest the camera may zoom to the selected rocket (km), from its size.
+    float MinDist() const;
     // Gather everything the HUD shows (telemetry, rocket labels, toggles).
     HudFrame BuildHud() const;
     // The default HUD, for backends that don't draw their own (DrawHud).
@@ -98,8 +104,18 @@ private:
     // the sim thread via IsInitialized(), so it must be atomic.
     std::atomic<bool> initialized_{false};
 
-    // Renderer-owned unit sphere (radius 1) for the surface markers.
+    // Renderer-owned unit sphere (radius 1) for the surface markers, and unit
+    // cone for arrowheads.
     MeshHandle markerSphere_ = 0;
+    MeshHandle arrowCone_    = 0;
+
+    // Sun and moon positions. The renderer reads its own copy so they show even
+    // with the sim's sun and moon gravity off.
+    Ephemeris ephem_;
+    bool      haveEphem_ = false;
+
+    // The camera is framed to the first rocket's size once it appears.
+    bool framed_ = false;
 
     float yaw   = 0.0f;
     float pitch = 0.3f;

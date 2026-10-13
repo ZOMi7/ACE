@@ -13,6 +13,9 @@
 #else
 #  include <GL/gl.h>
 #endif
+#ifndef GL_DEPTH_CLAMP
+#  define GL_DEPTH_CLAMP 0x864F
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -40,6 +43,7 @@ uniform vec4 tint;
 uniform vec4 fillColor;   // a > 0: hidden-line fill, drawn in exactly this colour
 uniform vec4 heat;        // xyz: unit direction of travel (view), w: heating [0,1]
 uniform vec4 graze;       // xyz: eye (view), w > 0: fade edges seen edge-on
+uniform vec4 light;       // xyz: unit direction to the sun (view), w > 0: night-side brightness
 out vec4 fragColor;
 out float depthM;
 void main() {
@@ -55,6 +59,11 @@ void main() {
         vec3 v = normalize(graze.xyz - (matModel*vec4(vertexPosition, 1.0)).xyz);
         c.a *= mix(0.1, 1.0, smoothstep(0.01, 0.12, abs(dot(n, v))));
     }
+    if (light.w > 0.0) {
+        // Day side full colour, night side dimmed, a soft terminator between.
+        vec3 n = normalize(mat3(matModel)*vertexNormal);
+        c.rgb *= mix(light.w, 1.0, smoothstep(-0.08, 0.12, dot(n, light.xyz)));
+    }
     if (heat.w > 0.0) {
         // Windward edges run from orange to near white as heating builds.
         vec3  n    = normalize(mat3(matModel)*vertexNormal);
@@ -66,10 +75,11 @@ void main() {
 )";
 
 // Depth is written per pixel on a log scale (view distance in metres, out to
-// 1e11), so precision stays a fixed fraction of the distance from a rocket's
-// bolts to the far limb of the Earth. A hardware depth buffer cannot, with the
-// near plane tight on the rocket. Fills sit back by a slope-scaled bias so the
-// edges lying on them win.
+// 1e12, past the sun), so precision stays a fixed fraction of the distance from
+// a rocket's bolts to the far limb of the Earth. A hardware depth buffer cannot,
+// with the near plane tight on the rocket. Fills sit back by a slope-scaled bias
+// so the edges lying on them win. Depth clamping stands in for the near and far
+// planes, so the sun and moon are drawn where they really are.
 const char* kFS = R"(#version 330
 in vec4 fragColor;
 in float depthM;
@@ -78,7 +88,7 @@ out vec4 finalColor;
 void main() {
     float d = max(depthM, 0.0);
     if (fillColor.a > 0.0) d += d*2e-5 + fwidth(d);
-    gl_FragDepth = log2(1.0 + d)*(1.0/log2(1.0 + 1e11));
+    gl_FragDepth = log2(1.0 + d)*(1.0/log2(1.0 + 1e12));
     finalColor = fragColor;
 }
 )";
@@ -241,9 +251,10 @@ void Pipeline::Init() {
     locFill_  = rlGetLocationUniform(prog_, "fillColor");
     locHeat_  = rlGetLocationUniform(prog_, "heat");
     locGraze_ = rlGetLocationUniform(prog_, "graze");
+    locLight_ = rlGetLocationUniform(prog_, "light");
 
     // Start the uniform caches off at "unset" so the first draw sends them.
-    for (float* c : { tint_, fill_, heat_, graze_ }) std::fill(c, c + 4, NAN);
+    for (float* c : { tint_, fill_, heat_, graze_, light_ }) std::fill(c, c + 4, NAN);
 }
 
 void Pipeline::Shutdown() {
@@ -262,10 +273,12 @@ void Pipeline::Begin(const RMat4& viewProj, RColor background) {
     bg_[1] = background.g / 255.0f;
     bg_[2] = background.b / 255.0f;
     bg_[3] = 1.0f;   // alpha doubles as the shader's "this is a fill" flag
+    glEnable(GL_DEPTH_CLAMP);
 }
 
 void Pipeline::End() {
     use(Mode::None);
+    glDisable(GL_DEPTH_CLAMP);
     rlDisableVertexArray();
     rlDisableShader();
 }
@@ -289,23 +302,25 @@ void Pipeline::setMatrices(const RMat4& model) {
     rlSetUniformMatrix(locModel_, toMatrix(model));
 }
 
-void Pipeline::setShading(const Shading& s, bool fill) {
+void Pipeline::setShading(const Shading& s, const float* fill) {
     if (fill) {
-        setVec4(locFill_, fill_, bg_[0], bg_[1], bg_[2], bg_[3]);
+        setVec4(locFill_, fill_, fill[0], fill[1], fill[2], fill[3]);
         return;
     }
     setVec4(locFill_, fill_, 0, 0, 0, 0);
     setVec4(locTint_, tint_, s.tint.r / 255.0f, s.tint.g / 255.0f, s.tint.b / 255.0f, s.tint.a / 255.0f);
     setVec4(locHeat_, heat_, s.heatDir.x, s.heatDir.y, s.heatDir.z, s.heat);
     setVec4(locGraze_, graze_, s.eye.x, s.eye.y, s.eye.z, s.grazeFade ? 1.0f : 0.0f);
+    setVec4(locLight_, light_, s.light.x, s.light.y, s.light.z, s.night);
 }
 
-void Pipeline::Fill(const GpuMesh& m, const RMat4& model) {
+void Pipeline::Fill(const GpuMesh& m, const RMat4& model, RColor color) {
     if (!m.vao || m.tris == 0) return;
     use(Mode::Fill);
     rlEnableShader(prog_);
     setMatrices(model);
-    setShading(Shading{}, true);
+    const float solid[4] = { color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, 1.0f };
+    setShading(Shading{}, color.a ? solid : bg_);
     rlEnableVertexArray(m.vao);
     glDrawElements(GL_TRIANGLES, m.tris, GL_UNSIGNED_INT, nullptr);
 }
@@ -315,7 +330,7 @@ void Pipeline::Edges(const GpuMesh& m, const RMat4& model, const Shading& s) {
     use(Mode::Edges);
     rlEnableShader(prog_);
     setMatrices(model);
-    setShading(s, false);
+    setShading(s, nullptr);
     rlEnableVertexArray(m.vao);
     glDrawElements(GL_LINES, m.lines, GL_UNSIGNED_INT, (const void*)(m.tris * sizeof(uint32_t)));
 }
@@ -347,7 +362,7 @@ void Pipeline::Lines(const LineVertex* v, size_t count) {
     use(Mode::Lines);
     rlEnableShader(prog_);
     setMatrices(rmath::identity());
-    setShading(Shading{}, false);
+    setShading(Shading{}, nullptr);
     rlEnableVertexArray(s.vao);
     glDrawArrays(GL_LINES, (GLint)s.used, (GLsizei)count);
     s.used += count;

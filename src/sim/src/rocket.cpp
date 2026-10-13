@@ -71,6 +71,10 @@ RocketState Rocket::get_state() const {
     s.v           = v;
     s.a           = a;
     s.w           = w;
+    s.a_grav      = grav_accel;
+    s.a_thrust    = thrust_accel;
+    s.a_drag      = drag_accel;
+    for (int i = active_idx; i < num_stages(); i++) s.stack.push_back({props.stages[i].geometry, props.stages[i].tip_to_end_length});
     s.q_rocket    = q_rocket;
     s.q_engine    = q_engine;
     s.mass        = m_current;

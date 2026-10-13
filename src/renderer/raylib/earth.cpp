@@ -143,7 +143,7 @@ void WireEarth::evict() {
     }
 }
 
-void WireEarth::Draw(wire::Pipeline& p, const EarthFrame& f, const RCamera& cam, float aspect) {
+void WireEarth::Draw(wire::Pipeline& p, const EarthFrame& f, const RCamera& cam, float aspect, const RVec3* sun) {
     ++frame_;
 
     // Camera in the body frame, relative to the planet centre (m), for LOD/culling.
@@ -172,6 +172,7 @@ void WireEarth::Draw(wire::Pipeline& p, const EarthFrame& f, const RCamera& cam,
     s.tint = theme::kGrid;
     s.grazeFade = true;
     s.eye = cam.position;
+    if (sun) { s.light = *sun; s.night = 0.45f; }
     for (size_t i = 0; i < chunks_.size(); ++i) p.Edges(chunkMesh(chunks_[i]), models_[i], s);
 
     evict();

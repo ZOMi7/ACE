@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 #include "geometry.hpp"
 #include "../sim/inc/sim.hpp"
+#include "../sim/inc/config.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -29,6 +30,9 @@ RocketState toEcef(RocketState s) {
     s.r = eci_to_ecef(s.r, s.t);
     s.v = eci_to_ecef(s.v, s.t);
     s.a = eci_to_ecef(s.a, s.t);
+    s.a_grav   = eci_to_ecef(s.a_grav, s.t);
+    s.a_thrust = eci_to_ecef(s.a_thrust, s.t);
+    s.a_drag   = eci_to_ecef(s.a_drag, s.t);
     s.q_rocket = qz * s.q_rocket;
     return s;
 }
@@ -42,8 +46,9 @@ float clampf(float v, float lo, float hi) {
 // rocket count/flight time, so each is capped and decimated to stay within these
 // budgets, leaving generous headroom for the HUD, labels, and debug overlays --
 // which are submitted last and would otherwise be the first to starve and flicker.
-constexpr size_t kTrailVertexBudget     = 900000;   // ~450k retained trail points
-constexpr size_t kPredictedVertexBudget = 700000;   // ~350k integrated path points
+constexpr size_t kTrailVertexBudget = 900000;   // ~450k retained trail points
+// RK4 steps shared by every rocket's predicted path per frame (2 verts each).
+constexpr size_t kPredictedStepBudget = 100000;
 
 float rvDist(const RVec3& a, const RVec3& b) {
     float dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
@@ -83,6 +88,13 @@ Renderer::Renderer(RenderBackend& backend, const sim::Sim& s)
     : backend_(backend), sim_(s) {
     backend_.Init(1920, 1080, "Trajectory Sim");
     markerSphere_ = backend_.CreateMesh(geom::buildSphere(1.0f, 16, 24));
+    arrowCone_    = backend_.CreateMesh(geom::buildCone(10));
+    // without a kernel there's just no sun or moon; the sim reports it if it needs one
+    SimConfig cfg = load_sim_config("config/sim.yaml");
+    if (FILE* f = std::fopen(cfg.ephemeris.c_str(), "rb")) {
+        std::fclose(f);
+        haveEphem_ = ephem_.load(cfg.ephemeris, cfg.epoch);
+    }
 }
 
 Renderer::~Renderer() {
@@ -102,6 +114,10 @@ void Renderer::Run() {
         // runs after the sample (it reads states_.size() to wrap).
         states_ = sim_.get_state();
         for (RocketState& st : states_) st = toEcef(st);   // render in the earth-fixed frame
+        if (!framed_ && !states_.empty()) {   // small vehicles start framed, not 50 m away
+            dist = fminf(fmaxf(MinDist() * 2.5f, 0.002f), dist);
+            framed_ = true;
+        }
         HandleInput();
         p_ref_eci_ = primaryState().r;   // scene centred on the selected rocket
         UpdateThrustLevels();
@@ -209,7 +225,7 @@ void Renderer::HandleInput() {
         pitch = clampf(pitch, -1.5f, 1.5f);  // avoid the straight-up/down singularity
     }
     if (in.wheel != 0.0f) dist *= powf(0.9f, in.wheel);
-    dist = clampf(dist, 0.02f, planet::EARTH.radius_km() * 50.0f);  // 20 m .. 50 Earth radii
+    dist = clampf(dist, MinDist(), planet::EARTH.radius_km() * 50.0f);  // vehicle size .. 50 Earth radii
 
     // Free-fly: translate the orbit pivot along the camera's own axes. Speed
     // scales with the zoom distance (and FrameTime for frame-rate independence)
@@ -225,6 +241,28 @@ void Renderer::HandleInput() {
         pivot_.z += (right.z*in.move_x + fwd.z*in.move_z) * s;
     }
     if (in.recenter) pivot_ = { 0.0f, 0.0f, 0.0f };
+}
+
+float Renderer::MinDist() const {
+    // About one vehicle length from its CoM, so small test articles can be seen
+    // up close; never under 2 m.
+    RocketState st = primaryState();
+    double extent = fmax(st.length + st.nose_length, 2.0 * st.radius);
+    return (float)fmax(extent, 2.0) * (float)consts::M_TO_KM;
+}
+
+bool Renderer::BehindEarth(const RVec3& p, const RCamera& cam) const {
+    // Does the segment from the camera to p pass through the Earth? The sphere is
+    // shrunk a little so points on the near surface still count as visible.
+    Vec3 c = ToViewKm({0, 0, 0});
+    Vec3 e = { cam.position.x, cam.position.y, cam.position.z };
+    Vec3 d = Vec3{ p.x, p.y, p.z } - e;
+    double len2 = d.dot(d);
+    if (len2 < 1e-12) return false;
+    double u = clampd((c - e).dot(d) / len2, 0.0, 1.0);
+    double R = planet::EARTH.radius_km() * 0.998;
+    Vec3 closest = e + d * u - c;
+    return closest.dot(closest) < R * R;
 }
 
 RCamera Renderer::BuildCamera() const {
@@ -256,12 +294,13 @@ void Renderer::DrawFrame(const RCamera& cam) {
 
     backend_.BeginFrame(kBlack);
     backend_.Begin3D(cam);
+        DrawSky();
         DrawEarth(cam, earthC);
         if (showDebug_)          DrawECIAxes();
         if (showDebug_)          DrawBodyAxes();
-        if (showDebug_)          DrawStateVectors();
-        if (showSurfaceMarkers_) DrawSurfaceMarkers();
-        if (showPredicted_)      DrawPredictedTrajectory();
+        if (showDebug_)          DrawStateVectors(cam);
+        if (showSurfaceMarkers_) DrawSurfaceMarkers(cam);
+        if (showPredicted_)      DrawPredictedTrajectory(cam);
         if (showTrails_)         DrawTrails();
         DrawRocket();
     backend_.End3D();
@@ -272,6 +311,22 @@ void Renderer::DrawFrame(const RCamera& cam) {
         DrawOverlayLegend(hud);
     }
     backend_.EndFrame();
+}
+
+void Renderer::DrawSky() const {
+    // Sun and moon from the ephemeris, carried into the earth-fixed frame at the
+    // sim time like everything else. Real distances and sizes.
+    if (!haveEphem_) return;
+    double t  = primaryState().t;
+    Vec3 sun  = eci_to_ecef(ephem_.sun(t), t);
+    Vec3 moon = eci_to_ecef(ephem_.moon(t), t);
+    SkyFrame f;
+    f.sun         = ToView(sun);
+    f.moon        = ToView(moon);
+    f.sun_radius  = (float)(planet::SUN.radius * consts::M_TO_KM);
+    f.moon_radius = (float)(planet::MOON.radius * consts::M_TO_KM);
+    f.sun_dir     = rvDir(sun);
+    backend_.DrawSky(f);
 }
 
 void Renderer::DrawEarth(const RCamera& cam, RVec3 earthC) {
@@ -322,7 +377,13 @@ void Renderer::DrawOneRocket(const RocketState& st, float thrustLevel, double de
     RMat4 Rqe = rmath::fromQuat(qe.w, qe.x, qe.y, qe.z);
 
     RocketFrame f;
-    f.dims = { st.length, st.cm_dist, st.radius, st.engine_dist, st.nose_length };
+    f.dims = { st.length, st.cm_dist, st.radius, st.engine_dist, st.nose_length, {} };
+    for (const StageShape& s : st.stack) {
+        HullSection::Kind k = s.geometry.shape == Shape::Cone   ? HullSection::Cone
+                            : s.geometry.shape == Shape::Sphere ? HullSection::Sphere
+                                                                : HullSection::Cylinder;
+        f.dims.sections.push_back({ k, s.geometry.radius, s.length });
+    }
     f.hull = rmath::mul(pv, rmath::mul(V, Rqr));
     // Bell pivots (gimbal) about the engine attach point in the body frame.
     f.bell = rmath::mul(pv, rmath::mul(V, rmath::mul(Rqr,
@@ -355,60 +416,144 @@ void Renderer::DrawOneRocket(const RocketState& st, float thrustLevel, double de
     backend_.DrawRocket(f);
 }
 
-void Renderer::DrawPredictedTrajectory() const {
-    // Where each rocket would coast if its engine cut out now: propagate the
-    // current state under the sim's J2 gravity (no thrust, no drag) with RK4. The
-    // primary's path is drawn bright yellow; the others a dimmer grey so the
-    // selected rocket stays legible in a crowd.
-    auto grav = INS::gravity_eci;
-
+void Renderer::DrawPredictedTrajectory(const RCamera& cam) const {
+    // Where each rocket goes if it coasts from here.
+    //
+    // An orbit whose periapsis clears the ground is drawn as its osculating
+    // ellipse, sampled evenly in true anomaly (dense where it bends hardest) and
+    // closed exactly, where it lies in inertial space right now rather than as a
+    // spiral over the turning Earth.
+    //
+    // Anything else is integrated with RK4 under the sim's J2 gravity (no thrust,
+    // drag, sun or moon). Steps start short and grow to a fixed share of the local
+    // orbital period, so the path is smooth beside the rocket and cheap far away.
+    // A path that comes down is drawn over the turning Earth, each point at its
+    // own time, so it ends where the rocket would land; an escape is drawn like an
+    // orbit.
     const size_t n = states_.size();
     if (n == 0) return;
+    const double gm       = planet::EARTH.gm;
+    const double maxAngle = consts::TAU / 1000.0;   // longest step, as orbital angle at the current radius
+    const double maxRange = 2.0e9;                  // m, past the moon
+    const int    ellipsePts = 360;
+    const int    maxSteps = (int)std::clamp<size_t>(kPredictedStepBudget / n, 32, 4000);
+    auto grav = INS::gravity_eci;
 
-    const double dt       = 1.0;       // s per step
-    const int    hardMax  = 20000;     // path-length cap per rocket
-    // Share the predicted budget across all rockets: each emits 2 verts/step, so
-    // cap steps so the aggregate stays within budget. Also bounds the RK4 work,
-    // which is the dominant CPU cost of this overlay at high rocket counts.
-    size_t perRocket = kPredictedVertexBudget / (2 * n);
-    int    max_steps = (int)std::min<size_t>(hardMax, perRocket < 1 ? 1 : perRocket);
+    RVec3 fwd = rvNorm({ cam.target.x - cam.position.x, cam.target.y - cam.position.y, cam.target.z - cam.position.z });
+    RVec3 rt  = rvNorm(rvCross(fwd, cam.up));
+    RVec3 up  = rvCross(rt, fwd);
 
-    // Coalesce every rocket's path into a single line-list submit. The paths are
-    // independent (prev,cur) pairs, so concatenation needs no separator.
     std::vector<LineVertex> path;
-    path.reserve(kPredictedVertexBudget + 2);
+    std::vector<Vec3>   pts;   // ECI (m)
+    std::vector<double> ts;    // seconds from now, integrated paths only
     for (size_t idx = 0; idx < n; idx++) {
-        // Propagate in ECI, then carry each point into the earth-fixed frame at its
-        // own time, so the path is where the rocket will be over the ground and the
-        // flown trail lands on it.
-        double t0 = states_[idx].t;
-        Vec3   r  = ecef_to_eci(states_[idx].r, t0);
-        Vec3   v  = ecef_to_eci(states_[idx].v, t0);
-        RColor col = ((int)idx == primary_) ? kYellow : kGray;
+        if (idx < detStart_.size() && detStart_[idx] >= 0.0) continue;   // exploded
+        const RocketState& st = states_[idx];
+        const bool   primary = (int)idx == primary_;
+        const RColor col     = primary ? kYellow : kGray;
+        const double t0 = st.t;
+        const Vec3   r0 = ecef_to_eci(st.r, t0);
+        const Vec3   v0 = ecef_to_eci(st.v, t0);
 
-        // A bound orbit repeats after one period: stop there instead of drawing laps over each other.
-        int    steps  = max_steps;
-        double energy = v.dot(v) / 2 - planet::EARTH.gm / r.mag();
-        if (energy < 0) {
-            double sma = -planet::EARTH.gm / (2 * energy);
-            steps = std::min(steps, (int)std::ceil(consts::TAU * std::sqrt(sma * sma * sma / planet::EARTH.gm) / dt));
+        // orbital elements: eccentricity vector, semi-latus rectum
+        Vec3   h   = r0.cross(v0);
+        Vec3   ecc = (r0 * (v0.dot(v0) - gm / r0.mag()) - v0 * r0.dot(v0)) / gm;
+        double e   = ecc.mag(), p = h.dot(h) / gm;
+        bool   orbit  = e < 1.0 && p / (1.0 + e) > planet::EARTH.radius;
+        bool   impact = false;
+
+        pts.assign(1, r0);
+        ts.assign(1, 0.0);
+        Vec3 P{}, Q{};
+        if (orbit) {
+            P = e > 1e-9 ? ecc / e : r0.unit();   // toward periapsis (anywhere, on a circle)
+            Q = h.unit().cross(P);
+            // Even steps, halved again and again toward the rocket at both ends, so
+            // the chords beside it stay true at any zoom.
+            double nu0 = std::atan2(r0.dot(Q), r0.dot(P)), step = consts::TAU / ellipsePts;
+            auto at = [&](double d) {
+                double nu = nu0 + d;
+                pts.push_back((P * std::cos(nu) + Q * std::sin(nu)) * (p / (1.0 + e * std::cos(nu))));
+            };
+            for (int j = 16; j >= 1; j--) at(step / (1 << j));
+            for (int k = 1; k < ellipsePts; k++) at(step * k);
+            for (int j = 1; j <= 16; j++) at(consts::TAU - step / (1 << j));
+            pts.push_back(r0);
+        } else {
+            Vec3   r = r0, v = v0;
+            double t = 0, dt = 0.2;
+            for (int i = 0; i < maxSteps && r.mag() < maxRange; i++) {
+                double rm = r.mag();
+                dt = std::min(dt * 1.15, maxAngle * std::sqrt(rm * rm * rm / gm));
+                Vec3 k1r = v,                k1v = grav(r);
+                Vec3 k2r = v + k1v*(dt/2),   k2v = grav(r + k1r*(dt/2));
+                Vec3 k3r = v + k2v*(dt/2),   k3v = grav(r + k2r*(dt/2));
+                Vec3 k4r = v + k3v*dt,       k4v = grav(r + k3r*dt);
+                r += (k1r + k2r*2 + k3r*2 + k4r) * (dt/6);
+                v += (k1v + k2v*2 + k3v*2 + k4v) * (dt/6);
+                t += dt;
+
+                // the ground: terrain in the bgfx build, the plain sphere otherwise
+                double rn = r.mag();
+                double ground = rn < planet::EARTH.radius + 1e4
+                              ? EarthSurface::Get().SurfaceRadius3D(eci_to_ecef(r, t0 + t)) : planet::EARTH.radius;
+                if (rn <= ground) {   // back up to where it crosses the ground
+                    double h0 = pts.back().mag() - ground;
+                    double u  = h0 > 0 ? h0 / (h0 - (rn - ground)) : 0.0;
+                    r = pts.back() + (r - pts.back()) * u;
+                    t = ts.back() + dt * u;
+                    impact = true;
+                }
+                pts.push_back(r);
+                ts.push_back(t);
+                if (impact) break;
+            }
+            if (impact && t < 3.0) continue;   // on the pad or about to touch down: nothing to show
         }
 
-        RVec3 prev = ToView(states_[idx].r);
-        for (int i = 0; i < steps; i++) {
-            Vec3 k1r = v,                k1v = grav(r);
-            Vec3 k2r = v + k1v*(dt/2),   k2v = grav(r + k1r*(dt/2));
-            Vec3 k3r = v + k2v*(dt/2),   k3v = grav(r + k2r*(dt/2));
-            Vec3 k4r = v + k3v*dt,       k4v = grav(r + k3r*dt);
-            r += (k1r + k2r*2 + k3r*2 + k4r) * (dt/6);
-            v += (k1v + k2v*2 + k3v*2 + k4v) * (dt/6);
-
-            RVec3 cur = ToView(eci_to_ecef(r, t0 + (i + 1) * dt));
+        auto ecefAt = [&](const Vec3& eci, size_t k) { return eci_to_ecef(eci, impact ? t0 + ts[k] : t0); };
+        RVec3 prev = ToView(st.r);
+        for (size_t k = 1; k < pts.size(); k++) {
+            RVec3 cur = ToView(ecefAt(pts[k], k));
             path.push_back({ prev, col });
             path.push_back({ cur,  col });
             prev = cur;
+        }
+        if (!primary) continue;
 
-            if (r.mag() <= planet::EARTH.radius) break;      // reached the surface
+        // The selected rocket's apsides and where it comes down, as small
+        // screen-facing marks. A near circular orbit's apsides have no real
+        // direction, so they're only marked once it's clearly eccentric.
+        auto mark = [&](const Vec3& ecef, bool cross, const char* label) {
+            RVec3 q  = ToView(ecef);
+            float sz = rvDist(q, cam.position) * 0.008f;
+            RVec3 a  = cross ? rvNorm({ rt.x + up.x, rt.y + up.y, rt.z + up.z }) : rt;
+            RVec3 b  = cross ? rvNorm({ up.x - rt.x, up.y - rt.y, up.z - rt.z }) : up;
+            RVec3 c[4] = { { q.x + a.x*sz, q.y + a.y*sz, q.z + a.z*sz }, { q.x + b.x*sz, q.y + b.y*sz, q.z + b.z*sz },
+                           { q.x - a.x*sz, q.y - a.y*sz, q.z - a.z*sz }, { q.x - b.x*sz, q.y - b.y*sz, q.z - b.z*sz } };
+            if (cross) {
+                path.push_back({ c[0], col }); path.push_back({ c[2], col });
+                path.push_back({ c[1], col }); path.push_back({ c[3], col });
+            } else {
+                for (int j = 0; j < 4; j++) { path.push_back({ c[j], col }); path.push_back({ c[(j + 1) % 4], col }); }
+            }
+            // labels that would sit on top of the rocket are left off
+            if (rvDist(q, ToView(st.r)) > rvDist(q, cam.position) * 0.04f && !BehindEarth(q, cam))
+                backend_.DrawLabel(q, label, col);
+        };
+        auto altKm = [&](const Vec3& eci) { return (eci.mag() - planet::EARTH.radius) * consts::M_TO_KM; };
+        if (orbit && e > 0.002) {
+            Vec3 pe = P * (p / (1.0 + e)), ap = P * (-p / (1.0 - e));
+            mark(eci_to_ecef(ap, t0), false, fmt("AP %.1f KM", altKm(ap)));
+            mark(eci_to_ecef(pe, t0), false, fmt("PE %.1f KM", altKm(pe)));
+        }
+        if (impact) {
+            size_t hi = 0;
+            for (size_t k = 1; k < pts.size(); k++) if (pts[k].mag() > pts[hi].mag()) hi = k;
+            if (hi > 0 && hi + 1 < pts.size()) mark(ecefAt(pts[hi], hi), false, fmt("AP %.1f KM", altKm(pts[hi])));
+            int sec = (int)ts.back();
+            mark(ecefAt(pts.back(), pts.size() - 1), true,
+                 fmt("IMPACT %02d:%02d:%02d", sec / 3600, (sec / 60) % 60, sec % 60));
         }
     }
     backend_.DrawLines(path.data(), path.size(), 2.0f);
@@ -492,61 +637,65 @@ void Renderer::DrawBodyAxes() const {
     backend_.DrawLines(bx.data(), bx.size(), 2.0f);
 }
 
-void Renderer::DrawStateVectors() const {
-    // Velocity and net-acceleration pointers stemming from each rocket's centre.
-    // Fixed length (scaled with zoom) — they show direction, not magnitude, which
-    // spans too many orders to draw to scale. Velocity is drawn a little longer
-    // than acceleration so the two stay distinguishable when they nearly align
-    // (e.g. thrust along the velocity vector on ascent).
+void Renderer::DrawStateVectors(const RCamera& cam) const {
+    // Velocity and the forces on each rocket as arrows from its CoM. Forces are per
+    // unit mass on one shared log scale so they compare at a glance: 1 g is one
+    // unit, 3 g two, 7 g three. Gravity includes the sun and moon; the ground's push
+    // is whatever the rest don't account for. Velocity is a fixed length. Arrows
+    // keep their size on screen as you zoom, and the selected rocket's are labelled.
+    const RColor kDrag = { 255, 40, 40, 255 };
     std::vector<LineVertex> lines;
-    auto arrow = [&](const RVec3& o, const Vec3& dir_eci, float len, RColor c) {
-        RVec3 d = rvDir(dir_eci);                       // unit direction in view space
-        if (d.x == 0 && d.y == 0 && d.z == 0) return;  // degenerate (near-zero vector)
-        RVec3 tip = { o.x + d.x*len, o.y + d.y*len, o.z + d.z*len };
-        lines.push_back({ o,   c });                    // shaft: rocket centre -> tip
-        lines.push_back({ tip, c });
+    for (size_t i = 0; i < states_.size(); i++) {
+        if (i < detStart_.size() && detStart_[i] >= 0.0) continue;   // exploded
+        const RocketState& st = states_[i];
+        const bool primary = (int)i == primary_;
+        const RVec3 o = ToView(st.r);
+        const float unit = rvDist(o, cam.position) * 0.1f;
 
-        // Arrowhead: four barbs swept back from the tip along two axes both
-        // perpendicular to the shaft (pick a reference not parallel to d).
-        RVec3 ref  = fabsf(d.y) < 0.99f ? RVec3{0,1,0} : RVec3{1,0,0};
-        RVec3 p1   = rvNorm(rvCross(d, ref));
-        RVec3 p2   = rvNorm(rvCross(d, p1));
-        RVec3 base = { tip.x - d.x*len*0.2f, tip.y - d.y*len*0.2f, tip.z - d.z*len*0.2f };
-        const float hw = len * 0.1f;                    // barb half-spread
-        for (const RVec3& p : { p1, p2 }) {
-            for (float s : { 1.0f, -1.0f }) {
-                RVec3 b = { base.x + p.x*hw*s, base.y + p.y*hw*s, base.z + p.z*hw*s };
-                lines.push_back({ tip, c });
-                lines.push_back({ b,   c });
-            }
-        }
-    };
+        auto arrow = [&](const Vec3& dir, float len, RColor c, const char* label) {
+            RVec3 d = rvDir(dir);
+            if (len < unit * 0.01f || (d.x == 0 && d.y == 0 && d.z == 0)) return;
+            RVec3 tip  = { o.x + d.x*len, o.y + d.y*len, o.z + d.z*len };
+            float head = fminf(unit * 0.12f, len * 0.4f);
+            RVec3 base = { tip.x - d.x*head, tip.y - d.y*head, tip.z - d.z*head };
+            lines.push_back({ o, c });
+            lines.push_back({ base, c });
+            Material m;
+            m.color = c;
+            backend_.DrawModel(arrowCone_, rmath::orientCone(base, tip, head * 0.35f), m);
+            if (primary) backend_.DrawLabel(tip, label, c);
+        };
+        auto force = [&](const Vec3& a, RColor c, const char* name) {
+            double g = a.mag() / consts::g0;
+            arrow(a, unit * (float)std::log2(1.0 + g), c, fmt("%s %.2f G", name, g));
+        };
 
-    for (const RocketState& st : states_) {
-        RVec3 o = ToView(st.r);
-        arrow(o, st.v, dist * 0.20f, kYellow);   // velocity (matches the predicted path)
-        arrow(o, st.a, dist * 0.14f, kOrange);   // net acceleration (gravity + thrust + drag)
+        arrow(st.v, unit * 1.5f, kYellow, fmt("VEL %.0f M/S", st.v.mag()));
+        force(st.a_thrust, kGreen,  "THR");
+        force(st.a_grav,   kOrange, "GRAV");
+        force(st.a_drag,   kDrag,   "DRAG");
+        force(st.a - st.a_grav - st.a_thrust - st.a_drag, kWhite, "GND");
     }
     backend_.DrawLines(lines.data(), lines.size(), 2.0f);
 }
 
-void Renderer::DrawSurfaceMarkers() const {
+void Renderer::DrawSurfaceMarkers(const RCamera& cam) const {
     // Launch origin and intended target: fixed points on the Earth's surface.
     // Each is a small "pin" — a stalk along the local vertical capped by a
     // sphere — so it reads as a point planted on the ground and is occluded by
-    // the globe when it rotates to the far side. Sized with zoom so the pins
-    // stay a roughly constant apparent size across the zoom range. One origin
-    // (green) + target (red) pin per rocket.
-    const float sphereR = dist * 0.02f;          // marker radius (km, view units)
-    const float pinLen  = dist * 0.06f;          // stalk height above the surface
-
+    // the globe when it rotates to the far side. Sized by their distance from the
+    // camera so they keep a constant apparent size. One origin (green) + target
+    // (red) pin per rocket.
     std::vector<LineVertex> stalks;
     auto pin = [&](const Vec3& surf_eci, RColor c) {
         double n = surf_eci.mag();
         if (n < 1e-6) return;
+        RVec3 baseW   = ToView(surf_eci);
+        float range   = rvDist(baseW, cam.position);
+        float sphereR = range * 0.006f;                        // marker radius (km, view units)
+        float pinLen  = range * 0.018f;                        // stalk height above the surface
         Vec3  out     = surf_eci / n;                          // local vertical (ECI)
         Vec3  tip_eci = surf_eci + out * (pinLen * consts::KM_TO_M);   // lift the cap off the ground
-        RVec3 baseW   = ToView(surf_eci);
         RVec3 tipW    = ToView(tip_eci);
         stalks.push_back({ baseW, c });
         stalks.push_back({ tipW,  c });
@@ -555,8 +704,10 @@ void Renderer::DrawSurfaceMarkers() const {
     };
 
     // origin/target are body-fixed (ECEF); the whole scene renders in that frame
+    // a rocket that starts in space has no launch site to mark
     for (const RocketState& st : states_) {
-        pin(st.init.origin_r_eci, kGreen);   // launch origin
+        const Vec3& o = st.init.origin_r_eci;
+        if (o.mag() - EarthSurface::Get().SurfaceRadius3D(o) < 1000.0) pin(o, kGreen);   // launch origin
         pin(st.init.target_r_ecef, kRed);    // intended target
     }
     backend_.DrawLines(stalks.data(), stalks.size(), 2.0f);

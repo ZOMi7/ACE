@@ -38,22 +38,6 @@ struct KinematicModifier {
     Vec3 torque;
 };
 
-// snapshot of rocket state at any given moment
-struct RocketState {
-    bool detonation_active = false;
-
-    double t = 0;
-    double mass = 0, fuel = 0;
-    double length = 0, cm_dist = 0, engine_dist = 0, radius = 0;   // dims from nose
-    double nose_length = 0;
-    bool has_engine = true;
-
-    Vec3 r{}, v{}, a{}, w{};
-    Quat q_rocket{1, 0, 0, 0};
-    Quat q_engine{1, 0, 0, 0};
-    RocketStartState init{};
-};
-
 // number of stages on the rocket
 inline constexpr int ROCKET_NUM_STAGES = 3;
 
@@ -110,6 +94,30 @@ struct Geometry {
             default:            return (3.0 * radius * radius + length * length) / 12.0;
         }
     }
+};
+
+// geometry of stage
+struct StageShape {
+    Geometry geometry;
+    double length;
+};
+
+// rocket state at any given moment
+struct RocketState {
+    bool detonation_active = false;
+
+    double t = 0;
+    double mass = 0, fuel = 0;
+    double length = 0, cm_dist = 0, engine_dist = 0, radius = 0;   // dims from nose
+    double nose_length = 0;
+    bool has_engine = true;
+
+    Vec3 r{}, v{}, a{}, w{};
+    Vec3 a_grav{}, a_thrust{}, a_drag{}; // parts of a from each force
+    std::vector<StageShape> stack;       // stages left, active first
+    Quat q_rocket{1, 0, 0, 0};
+    Quat q_engine{1, 0, 0, 0};
+    RocketStartState init{};
 };
 
 struct Stage {

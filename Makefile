@@ -37,7 +37,8 @@ build/fc/%.o: src/fc/src/%.c src/fc/inc/fc_api.h
 RAYLIB_SRCS := src/renderer/raylib/raylib_backend.cpp src/renderer/raylib/models.cpp \
                src/renderer/raylib/wire.cpp src/renderer/raylib/earth.cpp \
                src/renderer/raylib/earth_surface.cpp src/renderer/raylib/ground.cpp \
-               src/renderer/raylib/hud.cpp src/renderer/raylib/coastline.cpp
+               src/renderer/raylib/hud.cpp src/renderer/raylib/coastline.cpp \
+               src/renderer/raylib/sky.cpp
 RAYLIB_ARCH := -march=native
 TARGET      := program
 

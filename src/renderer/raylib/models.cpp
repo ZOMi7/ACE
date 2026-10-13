@@ -14,7 +14,7 @@ constexpr int kSides = 16;   // hull/bell facets: 16 longerons read cleanly as w
 // into place per frame, so it isn't part of the cache key.
 bool sameDims(const RocketDims& a, const RocketDims& b) {
     return a.length == b.length && a.radius == b.radius && a.engine_dist == b.engine_dist &&
-           a.nose_length == b.nose_length;
+           a.nose_length == b.nose_length && a.sections == b.sections;
 }
 
 float clamp01(float x) { return x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x); }
@@ -61,9 +61,6 @@ void RocketModel::Ensure(RenderBackend& b, const RocketDims& dims) {
 }
 
 RocketModel::HullBell RocketModel::buildHullBell(RenderBackend& b, const RocketDims& d) const {
-    const float L      = (float)d.length;
-    const float radius = (float)d.radius;
-
     const RColor kBody = theme::kPrimary;        // hull
     const RColor kNose = theme::kPrimary;        // nose
     const RColor kTrim = theme::kSelect;         // collar
@@ -74,27 +71,45 @@ RocketModel::HullBell RocketModel::buildHullBell(RenderBackend& b, const RocketD
     // across staging, even when only a short payload stage is left under it.
     const float noseLen   = (float)d.nose_length;
     const float nose_base = -noseLen;
-    const float tail_z    = -noseLen - L;
+
+    // The stages left, each in its own shape, stacked down from the nose. A plain
+    // cylinder of the widest radius stands in if the shapes aren't given.
+    std::vector<HullSection> stack = d.sections;
+    if (stack.empty()) stack.push_back({ HullSection::Cylinder, d.radius, d.length });
 
     Mesh hull;
-
-    // Barrel in stacked sections, so the wire shows ring frames about every
-    // three diameters. Only the bottom one is capped.
-    const float barrel = nose_base - tail_z;
-    int sections = (int)lroundf(barrel / (radius * 6.0f));
-    sections = sections < 1 ? 1 : (sections > 8 ? 8 : sections);
-    for (int s = 0; s < sections; ++s) {
-        float z0 = tail_z + barrel * s / sections;
-        float z1 = tail_z + barrel * (s + 1) / sections;
-        geom::appendFrustum(hull, z0, z1, radius, radius, kSides, kBody, s == 0, false);
+    float top = nose_base;
+    for (size_t i = stack.size(); i-- > 0;) {
+        const float r = (float)stack[i].radius, len = (float)stack[i].length, bot = top - len;
+        if (stack[i].kind == HullSection::Cone) {
+            geom::appendFrustum(hull, bot, top, r, 0.0f, kSides, kBody, true, false);
+        } else if (stack[i].kind == HullSection::Sphere) {
+            std::vector<RVec3> arc;   // pole to pole
+            for (int k = 0; k <= 8; ++k) {
+                float a = (float)consts::TAU * k / 16;
+                arc.push_back({ bot + len * 0.5f * (1.0f - cosf(a)), r * sinf(a), 0 });
+            }
+            geom::appendRevolve(hull, arc, kSides, kBody, false);
+        } else {
+            // Barrel in stacked sections, so the wire shows ring frames about every
+            // three diameters, capped at both ends so the stage joints show.
+            int rings = (int)lroundf(len / (r * 6.0f));
+            rings = rings < 1 ? 1 : (rings > 8 ? 8 : rings);
+            for (int k = 0; k < rings; ++k)
+                geom::appendFrustum(hull, bot + len * k / rings, bot + len * (k + 1) / rings, r, r,
+                                    kSides, kBody, k == 0, k == rings - 1);
+        }
+        top = bot;
     }
 
-    // Thin collar where the nose meets the barrel.
-    geom::appendFrustum(hull, nose_base - radius * 0.18f, nose_base, radius * 1.03f, radius,
-                        kSides, kTrim, false, false);
-
-    // Conical nose, straight sides to a sharp tip.
-    geom::appendFrustum(hull, nose_base, 0.0f, radius, 0.0f, kSides, kNose, false, false);
+    // Thin collar where the nose meets the stack, then the nose: a cone with
+    // straight sides to a sharp tip, as wide as the top stage.
+    if (noseLen > 0.0f) {
+        const float radius = (float)stack.back().radius;
+        geom::appendFrustum(hull, nose_base - radius * 0.18f, nose_base, radius * 1.03f, radius,
+                            kSides, kTrim, false, false);
+        geom::appendFrustum(hull, nose_base, 0.0f, radius, 0.0f, kSides, kNose, false, false);
+    }
 
     MeshHandle hullH = b.CreateMesh(hull);
 
@@ -103,7 +118,7 @@ RocketModel::HullBell RocketModel::buildHullBell(RenderBackend& b, const RocketD
     Mesh bell;
     std::vector<RVec3> bp;
     const int BS = 4;
-    const float rT = radius * 0.4f, rE = radius * 1.15f;
+    const float rT = (float)stack.front().radius * 0.4f, rE = (float)stack.front().radius * 1.15f;
     for (int i = BS; i >= 0; --i) {   // exit -> throat, so z increases
         float u = (float)i / BS;
         bp.push_back({ -1.5f * u, rT + (rE - rT) * powf(u, 1.5f), 0 });

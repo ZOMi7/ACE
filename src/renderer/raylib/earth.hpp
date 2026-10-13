@@ -22,7 +22,8 @@ public:
     void Init();       // needs the GL context
     void Shutdown();
 
-    void Draw(wire::Pipeline& p, const EarthFrame& f, const RCamera& cam, float aspect);
+    // `sun` (unit, view space) lights the grid; null leaves it unlit.
+    void Draw(wire::Pipeline& p, const EarthFrame& f, const RCamera& cam, float aspect, const RVec3* sun);
 
 private:
     struct Cached { wire::GpuMesh mesh; uint64_t lastFrame; };

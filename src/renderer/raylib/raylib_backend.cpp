@@ -36,12 +36,14 @@ void RaylibBackend::Init(int width, int height, const char* title) {
     wire_.Init();
     earth_.Init();
     coast_.Init();
+    sky_.Init();
     hud_.Init();
 }
 
 void RaylibBackend::Shutdown() {
     earth_.Shutdown();
     coast_.Shutdown();
+    sky_.Shutdown();
     for (wire::GpuMesh& m : meshes_) wire::Destroy(m);
     for (::Texture2D& t : textures_) UnloadTexture(t);
     wire_.Shutdown();
@@ -99,6 +101,7 @@ void RaylibBackend::DestroyMesh(MeshHandle h) {
 void RaylibBackend::BeginFrame(RColor clear) {
     clear_ = clear;
     labels_.clear();
+    haveSun_ = false;
     BeginDrawing();
     ClearBackground(toRl(clear));
 }
@@ -187,11 +190,23 @@ void RaylibBackend::DrawRocket(const RocketFrame& f) {
 void RaylibBackend::DrawEarth(const EarthFrame& f) {
     rlSetLineWidth(1.0f);
     int h = GetScreenHeight();
-    earth_.Draw(wire_, f, cam_, h > 0 ? (float)GetScreenWidth() / (float)h : 1.0f);
+    const RVec3* sun = haveSun_ ? &sunDir_ : nullptr;
+    earth_.Draw(wire_, f, cam_, h > 0 ? (float)GetScreenWidth() / (float)h : 1.0f, sun);
     rlSetLineWidth(1.5f);
-    coast_.Draw(wire_, f);
+    coast_.Draw(wire_, f, sun);
     rlSetLineWidth(1.0f);
     ground_.Draw(*this, f, cam_, labels_);
+}
+
+void RaylibBackend::DrawSky(const SkyFrame& f) {
+    sunDir_  = f.sun_dir;
+    haveSun_ = true;
+    rlSetLineWidth(1.5f);
+    sky_.Draw(wire_, f, cam_);
+}
+
+void RaylibBackend::DrawLabel(const RVec3& pos, const char* text, RColor c) {
+    labels_.push_back({ pos, text, theme::Remap(c) });
 }
 
 bool RaylibBackend::DrawHud(const HudFrame& hud) {
