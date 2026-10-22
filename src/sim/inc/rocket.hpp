@@ -213,7 +213,8 @@ class Rocket {
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // functions used by sim                                                                     //
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    void update_dynamics(double current_time);
+    void update_dynamics_3DoF_DOP853(double current_time);
+    void update_dynamics_6DoF_RK4(double current_time);
     void update_mass();
     void update_flight_controller(double current_time);
 
@@ -338,6 +339,7 @@ class Rocket {
 
     // every acceleration (ECI) and every torque about the CoM (body) acting on the rocket
     KinematicModifier kinematic_state(double m_i, const Vec3& r_i, const Vec3& v_i, const Quat& q_i, const Vec3& w_i, const RocketProps& props, double t_burn, double t); // gravity + drag + thrust + rcs
+    Vec3 dop853_accel(const Vec3& r_i, const Vec3& v_i, double t);
         KinematicModifier calc_drag_kinematics(const Vec3& r, const Vec3& v, const Quat& q, const Vec3& w, double mass, const RocketProps& props);
         Vec3 calc_gravity_accel(const Vec3& r, const double GM, const double J2, const double R, const double t);
         KinematicModifier calc_propulsion_kinematics(const Vec3& r, const Vec3& v, const Quat& q, const Vec3& w, double mass, const RocketProps& props, double t_burn);

@@ -99,7 +99,7 @@ namespace sim {
 
                 // update the position, orientation, and mass of the rocket
                 r.update_mass();
-                r.update_dynamics(t);
+                r.update_dynamics_6DoF_RK4(t);
 
                 // delete rocket if it exploded
                 if (r.is_exploded()) {

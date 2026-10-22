@@ -307,7 +307,7 @@ KinematicModifier Rocket::kinematic_state(double m_i, const Vec3& r_i, const Vec
  * calculates all dynamics of the rocket using RK4
  * @param current_time simulation time
  */
-void Rocket::update_dynamics(double current_time) {
+void Rocket::update_dynamics_6DoF_RK4(double current_time) {
     // rocket mass
     double m = m_current;
 
